@@ -764,8 +764,8 @@ def main():
 
     robot = UnitreeGo2(ip=ip, websocket_port=7779, connection_type=connection_type)
     robot.start()
-    time.sleep(5)
-    logger.info(robot.track_object("person"))
+    # Uncomment to start person tracking WIP
+    # logger.info(robot.track_object("person"))
     try:
         while True:
             time.sleep(0.1)

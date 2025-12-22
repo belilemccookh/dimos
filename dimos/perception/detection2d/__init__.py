@@ -4,5 +4,8 @@ from dimos.perception.detection2d.module2D import (
 from dimos.perception.detection2d.module3D import (
     Detection3DModule,
 )
+from dimos.perception.detection2d.moduleDB import (
+    ObjectDBModule,
+)
 from dimos.perception.detection2d.utils import *
 from dimos.perception.detection2d.yolo_2d_det import *

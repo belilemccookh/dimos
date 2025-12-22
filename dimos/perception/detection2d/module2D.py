@@ -118,7 +118,6 @@ class Detection2DModule(Module):
         return imageDetections
 
     def process_image_frame(self, image: Image) -> ImageDetections2D:
-        print("Processing image frame for detections", image)
         return ImageDetections2D.from_detector(
             image, self.detector.process_image(image.to_opencv())
         )
@@ -141,9 +140,9 @@ class Detection2DModule(Module):
 
     @rpc
     def start(self):
-        # self.detection_stream_2d().subscribe(
-        #    lambda det: self.detections.publish(det.to_ros_detection2d_array())
-        # )
+        self.detection_stream_2d().subscribe(
+            lambda det: self.detections.publish(det.to_ros_detection2d_array())
+        )
 
         def publish_cropped_images(detections: ImageDetections2D):
             for index, detection in enumerate(detections[:3]):
