@@ -55,6 +55,9 @@ Examples:
   # Run with custom parameters and auto-execute
   python ft_pull_test.py --xarm 192.168.1.210 --auto-run --force-threshold 5.0
 
+  # Run in loop mode for repeated pulls (press Enter for each pull)
+  python ft_pull_test.py --xarm 192.168.1.210 --loop-mode
+
   # Run in interactive mode with agent
   python ft_pull_test.py --xarm 192.168.1.210 --interactive
         """,
@@ -168,6 +171,11 @@ Examples:
     )
     parser.add_argument(
         "--auto-run", action="store_true", help="Automatically start the continuous pull on startup"
+    )
+    parser.add_argument(
+        "--loop-mode",
+        action="store_true",
+        help="Run in loop mode - press Enter to trigger pulls repeatedly, 'q' to quit",
     )
 
     # System arguments
@@ -384,12 +392,67 @@ Examples:
         # Keep running for a bit to allow cleanup
         time.sleep(5)
 
+    # Loop mode - press Enter to trigger repeated pulls
+    elif args.loop_mode:
+        logger.info("=" * 60)
+        logger.info("LOOP MODE - Press Enter to run pull, 'q' + Enter to quit")
+        logger.info("=" * 60)
+
+        pull_count = 0
+
+        while True:
+            # Wait for user input
+            user_input = input(
+                f"\n[Pull {pull_count + 1}] Press Enter to start pull (or 'q' to quit): "
+            )
+
+            if user_input.lower() == "q":
+                logger.info("User requested quit")
+                break
+
+            # Reset the module for a fresh start
+            logger.info("Resetting FT pull module...")
+            ft_pull.reset()
+
+            # Wait for sensor data to stabilize
+            logger.info("Waiting for sensor stabilization...")
+            time.sleep(1)
+
+            # Check that we have force data
+            stats = ft_pull.get_stats()
+            if not stats["has_force_data"]:
+                logger.warning("No force data available, waiting...")
+                time.sleep(2)
+                stats = ft_pull.get_stats()
+                if not stats["has_force_data"]:
+                    logger.error("Still no force data, skipping this pull")
+                    continue
+
+            # Execute the pull
+            logger.info(f"Starting pull #{pull_count + 1}...")
+            result = ft_pull.continuous_pull(
+                pivot_distance=args.pivot_distance,
+                force_threshold=args.force_threshold,
+                rotation_gain=args.rotation_gain,
+                pull_speed=args.pull_speed,
+                door_opens_clockwise=args.door_opens_clockwise,
+                rotation_axis=args.rotation_axis,
+                max_duration=args.max_duration,
+                end_angle=args.end_angle,
+            )
+
+            logger.info(f"Pull #{pull_count + 1} completed: {result}")
+            pull_count += 1
+
+        logger.info(f"Loop mode complete. Executed {pull_count} pulls.")
+
     # Default mode - manual control
     else:
         logger.info("Modules running. Skills available for RPC calls:")
         logger.info("  - continuous_pull: Start adaptive door pulling")
         logger.info("  - stop_pull: Stop the pull operation")
         logger.info("Use --auto-run to automatically start pulling")
+        logger.info("Use --loop-mode for repeated pulls with Enter key")
         logger.info("Use --interactive for agent-based control")
         logger.info("Press Ctrl+C to stop...")
 

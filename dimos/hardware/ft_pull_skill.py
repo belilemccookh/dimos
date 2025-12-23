@@ -148,6 +148,10 @@ class FTPullModule(Module):
         self.running = False
         self.stop_requested = False
 
+        # Subscription tracking for cleanup/reset
+        self._force_subscription = None
+        self._torque_subscription = None
+
     @rpc
     def start(self):
         """Start the module and subscribe to inputs."""
@@ -155,11 +159,11 @@ class FTPullModule(Module):
 
         # Subscribe to force and torque data
         if self.force:
-            self.force.subscribe(self.handle_force)
+            self._force_subscription = self.force.subscribe(self.handle_force)
             logger.info("Subscribed to force stream")
 
         if self.torque:
-            self.torque.subscribe(self.handle_torque)
+            self._torque_subscription = self.torque.subscribe(self.handle_torque)
             logger.info("Subscribed to torque stream")
 
         # Initialize xARM if configured
@@ -168,6 +172,74 @@ class FTPullModule(Module):
 
         # Always initialize Drake simulation with Meshcat
         self.setup_drake_simulation()
+
+    @rpc
+    def reset(self):
+        """Reset module state for a new pull operation."""
+        logger.info("Resetting FT Pull module")
+
+        # 1. Stop any ongoing pull
+        self.stop_requested = True
+        self.running = False
+
+        # 2. Dispose existing subscriptions
+        if self._force_subscription:
+            self._force_subscription.dispose()
+            self._force_subscription = None
+        if self._torque_subscription:
+            self._torque_subscription.dispose()
+            self._torque_subscription = None
+
+        # 3. Clear all state variables
+        with self.force_lock:
+            self.latest_force = None
+            self.latest_torque = None
+
+        self.force_history.clear()
+        self.rotation_history.clear()
+        self.motion_history.clear()
+        self.total_rotation = 0.0
+        self.total_pull_distance = 0.0
+        self.motion_count = 0
+        self.last_rotation_direction = 0
+
+        # 4. Re-subscribe to streams
+        if self.force:
+            self._force_subscription = self.force.subscribe(self.handle_force)
+            logger.info("Re-subscribed to force stream")
+
+        if self.torque:
+            self._torque_subscription = self.torque.subscribe(self.handle_torque)
+            logger.info("Re-subscribed to torque stream")
+
+        # 5. Re-initialize Drake simulation positions if needed
+        if self.plant and self.xarm_initial_positions:
+            initial_positions = np.zeros(self.plant.num_positions())
+            arm_joint_names = [f"joint{i + 1}" for i in range(6)]
+            for i, joint_name in enumerate(arm_joint_names):
+                try:
+                    joint = self.plant.GetJointByName(joint_name)
+                    joint_index = joint.position_start()
+                    if i < len(self.xarm_initial_positions):
+                        initial_positions[joint_index] = self.xarm_initial_positions[i]
+                except Exception as e:
+                    logger.error(f"Error resetting {joint_name}: {e}")
+
+            # Set gripper position
+            try:
+                gripper_joint = self.plant.GetJointByName("drive_joint")
+                gripper_index = gripper_joint.position_start()
+                if self.gripper_position is not None:
+                    initial_positions[gripper_index] = self.gripper_position
+            except:
+                pass
+
+            self.plant.SetPositions(self.plant_context, initial_positions)
+            if self.diagram:
+                self.diagram.ForcedPublish(self.diagram_context)
+
+        logger.info("Module reset complete")
+        return "Module reset complete"
 
     def handle_force(self, msg: Vector3):
         """Handle incoming force data."""
@@ -998,6 +1070,15 @@ class FTPullModule(Module):
 
     def cleanup(self):
         """Clean up resources."""
+        # Dispose subscriptions first
+        if self._force_subscription:
+            self._force_subscription.dispose()
+            self._force_subscription = None
+        if self._torque_subscription:
+            self._torque_subscription.dispose()
+            self._torque_subscription = None
+
+        # Then disconnect xARM
         if self.arm:
             self.arm.disconnect()
             logger.info("xARM connection closed")
