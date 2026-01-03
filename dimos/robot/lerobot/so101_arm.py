@@ -16,10 +16,13 @@ import asyncio
 
 # Import LCM message types
 from dimos_lcm.sensor_msgs import CameraInfo
+from dimos.msgs.geometry_msgs import Quaternion, Transform, Vector3
+
 
 from dimos import core
 from dimos.hardware.camera.module import CameraModule
-from dimos.hardware.so101_utils import SO101Arm
+from dimos.hardware.camera.webcam import Webcam
+from dimos.hardware.so101_arm import SO101Arm
 from dimos.manipulation.visual_servoing.manipulation_module import ManipulationModule
 from dimos.msgs.sensor_msgs import Image
 from dimos.protocol import pubsub
@@ -28,8 +31,10 @@ from dimos.robot.robot import Robot
 from dimos.skills.skills import SkillLibrary
 from dimos.types.robot_capabilities import RobotCapability
 from dimos.utils.logging_config import setup_logger
+from dimos.hardware.camera.realsense import HAS_REALSENSE_SDK, RealSenseCamera, RealSenseModule
 
 logger = setup_logger("dimos.robot.lerobot.so101_arm")
+
 
 
 class SO101ArmRobot(Robot):
@@ -58,8 +63,14 @@ class SO101ArmRobot(Robot):
         # Deploy Camera Module (Can replace with ZED module)
         logger.info("Deploying camera module...")
         self.camera = self.dimos.deploy(
-            CameraModule,
-            config=CameraModule.default_config(),  # or override camera_index, etc.
+            RealSenseModule,
+            serial_number="215322078948",
+            width=1280,
+            height=720,
+            fps=30,
+            enable_color=True,
+            enable_depth=False,  # Only need color for display
+            align_depth_to_color=False,
         )
 
         # Configure camera LCM
@@ -68,11 +79,22 @@ class SO101ArmRobot(Robot):
 
         # Deploy manipulation module
         logger.info("Deploying manipulation module...")
-        self.manipulation_interface = self.dimos.deploy(ManipulationModule, arm=SO101Arm())
+        self.manipulation_interface = self.dimos.deploy(
+            ManipulationModule,
+            arm="so101",
+            ee_to_camera_6dof=[
+                0.02535444,
+                0.05690531,
+                0.01182119,
+                -2.8845617934963883,
+                -0.028059600646724192,
+                0.035302457201630055,
+            ],
+        )
 
         # Connect modules
         self.manipulation_interface.rgb_image.connect(self.camera.color_image)
-        # self.manipulation_interface.depth_image.connect(self.camera.depth_image)
+        self.manipulation_interface.depth_image.connect(self.camera.depth_image)
         self.manipulation_interface.camera_info.connect(self.camera.camera_info)
 
         # Configure manipulation output
@@ -146,6 +168,18 @@ class SO101ArmRobot(Robot):
             self.dimos.close()
 
         logger.info("SO101ArmRobot stopped")
+
+        # ------------------------------------------------------------------
+    # Required abstract methods from Robot base class
+    # ------------------------------------------------------------------
+
+    def cleanup(self) -> None:
+        """Clean up robot resources.
+
+        Implements the abstract ``cleanup`` method from ``Robot`` by delegating
+        to ``stop()``, which already performs the shutdown logic.
+        """
+        self.stop()
 
 
 async def run_so101_arm() -> None:

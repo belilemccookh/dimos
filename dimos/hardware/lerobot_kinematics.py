@@ -202,7 +202,20 @@ class LerobotKinematics:
             dq_active = J.T @ np.linalg.solve(A, twist)
             
             q = q + step_size * dq_active
-        return np.degrees(q)
+        
+        # Safety check: verify the solution accuracy
+        q_sol_deg = np.degrees(q)
+        final_pos, final_quat_wxyz = self.fk(q_sol_deg)
+        final_pos_error = np.linalg.norm(target_pos - final_pos)
+        
+        if final_pos_error > 0.1:  # 10cm threshold
+            raise ValueError(
+                f"IK solver unable to find satisfactory solution. "
+                f"Final position error: {final_pos_error*100:.2f}cm (threshold: 10cm). "
+                f"Target position: {target_pos}, Final position: {final_pos}"
+            )
+        
+        return q_sol_deg
     
     def ik_lerobot(
         self,

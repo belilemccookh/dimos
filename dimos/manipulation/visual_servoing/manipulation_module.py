@@ -30,7 +30,7 @@ from reactivex.disposable import Disposable
 
 from dimos.core import In, Module, Out, rpc
 from dimos.hardware.piper_arm import PiperArm
-from dimos.hardware.so101_utils import SO101Arm
+from dimos.hardware.so101_arm import SO101Arm
 from dimos.manipulation.visual_servoing.detection3d import Detection3DProcessor
 from dimos.manipulation.visual_servoing.pbvs import PBVS
 from dimos.manipulation.visual_servoing.utils import (
@@ -117,7 +117,7 @@ class ManipulationModule(Module):
 
     def __init__(  # type: ignore[no-untyped-def]
         self,
-        arm: PiperArm | SO101Arm = None,
+        arm: str,
         ee_to_camera_6dof: list | None = None,  # type: ignore[type-arg]
         **kwargs,
     ) -> None:
@@ -133,10 +133,24 @@ class ManipulationModule(Module):
         """
         super().__init__(**kwargs)
 
-        self.arm = arm
+        self.arm_type = arm
+        self.arm = PiperArm() if arm == "piper" else SO101Arm()
 
         if ee_to_camera_6dof is None:
-            ee_to_camera_6dof = [-0.065, 0.03, -0.095, 0.0, -1.57, 0.0]
+            # Default calibration for SO101 arm wrist camera
+            # Format: [x, y, z, rx, ry, rz] in meters and radians
+            if arm == "so101":
+                ee_to_camera_6dof = [
+                    -0.04462683,
+                    0.02325090,
+                    -0.06492827,
+                    -0.3405,
+                    0.3405,
+                    -1.5436,
+                ]
+            else:
+                # Default for piper arm (legacy values)
+                ee_to_camera_6dof = [-0.065, 0.03, -0.095, 0.0, -1.57, 0.0]
         pos = Vector3(ee_to_camera_6dof[0], ee_to_camera_6dof[1], ee_to_camera_6dof[2])
         rot = Vector3(ee_to_camera_6dof[3], ee_to_camera_6dof[4], ee_to_camera_6dof[5])
         self.T_ee_to_camera = create_transform_from_6dof(pos, rot)
@@ -155,17 +169,17 @@ class ManipulationModule(Module):
 
         # Grasp parameters
         self.grasp_width_offset = 0.03
-        self.pregrasp_distance = 0.25
-        self.grasp_distance_range = 0.03
-        self.grasp_close_delay = 2.0
+        self.pregrasp_distance = 0.08
+        self.grasp_distance_range = 0.032
+        self.grasp_close_delay = 21.0
         self.grasp_reached_time = None
         self.gripper_max_opening = 0.07
 
         # Workspace limits and dynamic pitch parameters
-        self.workspace_min_radius = 0.2
-        self.workspace_max_radius = 0.75
-        self.min_grasp_pitch_degrees = 5.0
-        self.max_grasp_pitch_degrees = 60.0
+        self.workspace_min_radius = 0.15
+        self.workspace_max_radius = 0.40
+        self.min_grasp_pitch_degrees = 70.0
+        self.max_grasp_pitch_degrees = 90.0
 
         # Grasp stage tracking
         self.grasp_stage = GraspStage.IDLE
@@ -227,8 +241,10 @@ class ManipulationModule(Module):
         unsub = self.rgb_image.subscribe(self._on_rgb_image)
         self._disposables.add(Disposable(unsub))
 
-        unsub = self.depth_image.subscribe(self._on_depth_image)
-        self._disposables.add(Disposable(unsub))
+        # Only subscribe to depth if not SO101 (SO101 has RGB-only camera)
+        if self.arm_type != "so101" and self.depth_image is not None:
+            unsub = self.depth_image.subscribe(self._on_depth_image)
+            self._disposables.add(Disposable(unsub))
 
         unsub = self.camera_info.subscribe(self._on_camera_info)
         self._disposables.add(Disposable(unsub))
@@ -664,6 +680,10 @@ class ManipulationModule(Module):
                 self.adjustment_count = 0
                 self.waiting_for_reach = False
             elif not self.waiting_for_reach and self.target_updated:
+                print("inside execute pre grasp")
+                print("ee pose: ", ee_pose)
+                print("target pose: ", target_pose)
+
                 self.arm.cmd_ee_pose(target_pose)
                 self.current_executed_pose = target_pose
                 self.waiting_for_reach = True
@@ -801,7 +821,14 @@ class ManipulationModule(Module):
         self,
     ) -> tuple[np.ndarray | None, Detection3DArray | None, Detection2DArray | None, Pose | None]:  # type: ignore[type-arg]
         """Capture frame from camera data and process detections."""
-        if self.latest_rgb is None or self.latest_depth is None or self.detector is None:
+        if self.latest_rgb is None or self.detector is None:
+            return None, None, None, None
+
+        # For SO101 (RGB-only camera), create a fake depth image with z=0.1
+        if self.arm_type == "so101" and self.latest_depth is None:
+            height, width = self.latest_rgb.shape[:2]
+            self.latest_depth = np.full((height, width), 0.1, dtype=np.float32)
+        elif self.latest_depth is None:
             return None, None, None, None
 
         ee_pose = self.arm.get_ee_pose()
@@ -817,7 +844,7 @@ class ManipulationModule(Module):
     def pick_target(self, x: int, y: int) -> bool:
         """Select a target object at the given pixel coordinates."""
         if not self.last_detection_2d_array or not self.last_detection_3d_array:
-            logger.warning("No detections available for target selection")
+            logger.info("No detections available for target selection")
             return False
 
         clicked_3d = find_clicked_detection(
@@ -828,6 +855,26 @@ class ManipulationModule(Module):
             if not self.check_within_workspace(clicked_3d.bbox.center):
                 self.task_failed = True
                 return False
+            # Sanjay DEBUG
+            if clicked_3d:
+                # Update z position before building info
+                if clicked_3d.bbox and clicked_3d.bbox.center:
+                    clicked_3d.bbox.center.position.z = 0.025
+                    clicked_3d.bbox.center.position.x = 0.3
+                    clicked_3d.bbox.center.position.y = 0.0
+                    clicked_3d.bbox.size.z = 0.05
+                
+                info_parts = [f"ID={clicked_3d.id}"]
+                if clicked_3d.bbox and clicked_3d.bbox.center:
+                    pos = clicked_3d.bbox.center.position
+                    info_parts.append(f"pos=({pos.x:.3f}, {pos.y:.3f}, {pos.z:.3f})")
+                if clicked_3d.bbox and clicked_3d.bbox.size:
+                    size = clicked_3d.bbox.size
+                    info_parts.append(f"size=({size.x:.3f}, {size.y:.3f}, {size.z:.3f})")
+                if clicked_3d.results_length > 0 and clicked_3d.results:
+                    result = clicked_3d.results[0]
+                    info_parts.append(f"class={result.hypothesis.class_id}, score={result.hypothesis.score:.3f}")
+                print(f"clicked 3d: {', '.join(info_parts)}")
 
             self.pbvs.set_target(clicked_3d)
 
@@ -860,7 +907,6 @@ class ManipulationModule(Module):
             x, y = self.target_click
             if self.pick_target(x, y):
                 self.target_click = None
-
         if (
             detection_3d_array
             and self.grasp_stage in [GraspStage.PRE_GRASP, GraspStage.GRASP]

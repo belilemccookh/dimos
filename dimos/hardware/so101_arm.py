@@ -49,7 +49,7 @@ class SO101Arm:
         self.enable()
 
         # Go to a known configuration
-        self.gotoObserve()
+        self.gotoZero()
         time.sleep(1)
 
         # Init velocity controller (Jacobians etc.)
@@ -73,9 +73,9 @@ class SO101Arm:
     def gotoZero(self, duration: float | None = None) -> None:
         """Move to home position (all joints at 0 rad)."""
         logger.info("Going to zero")
-        q_zero = np.array([-0.03989324, -1.81284089, 1.69085964, 1.28578981, -0.00613742], dtype=float)
+        q_zero = np.zeros(5, dtype=float)
         self.arm.move_joint_ptp(q_zero, duration=duration)
-
+        
         self.release_gripper()
         time.sleep(1.0)
         self.close_gripper()
@@ -84,7 +84,8 @@ class SO101Arm:
     def gotoObserve(self, duration: float | None = None) -> None:
         """Move to an 'observe' pose with simple joint interpolation."""
         logger.info("Going to observe")
-        observe_angles = np.zeros(5, dtype=float)
+        observe_angles = np.array([-0.184890,-0.056771,-0.566177,1.785990,0.007672], dtype=float)
+        # observe_angles = np.array([0,0,0,1.35990,0], dtype=float)
         self.arm.move_joint_ptp(observe_angles, duration=duration)
         print("ee pose: ", self.get_ee_pose())
         self.release_gripper()
@@ -92,9 +93,21 @@ class SO101Arm:
         self.close_gripper()
         time.sleep(0.5)
 
+    def goToRest(self, duration: float | None = None) -> None:
+        """Move to a resting pose."""
+
+        q_rest = np.array([-0.03989324, -1.81284089, 1.69085964, 1.28578981, -0.00613742], dtype=float)
+        self.arm.move_joint_ptp(q_rest, duration=duration)
+        print("ee pose: ", self.get_ee_pose())
+        self.release_gripper()
+        time.sleep(1.0)
+        self.close_gripper()
+        time.sleep(0.5)
+
+
     def softStop(self) -> None:
         """Move to zero and then disable torque (no hard 'kill')."""
-        self.gotoZero()
+        self.goToRest()
         time.sleep(1.0)
         self.arm.disable()
 
@@ -198,7 +211,6 @@ class SO101Arm:
             time.sleep(0.05)
 
             _p, actual_effort = self.get_gripper_feedback()
-            print("actual_effort: ", actual_effort)
             if actual_effort >= threshold:
                 # Contact detected – relieve a tiny bit of pressure
                 self.cmd_gripper_ctrl(cmd_pos + backoff, effort=commanded_effort)
