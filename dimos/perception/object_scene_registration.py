@@ -39,8 +39,8 @@ from dimos.core import Module, rpc
 from dimos.msgs.geometry_msgs import Transform
 from dimos.msgs.sensor_msgs import CameraInfo, Image
 from dimos.perception.detection.detectors.yoloe import Yoloe2DDetector, YoloePromptMode
-from dimos.perception.detection.type import ImageDetections2D
 from dimos.perception.detection.objectDB import ObjectDB
+from dimos.perception.detection.type import ImageDetections2D
 from dimos.perception.detection.type.detection3d.object import (
     Object,
     aggregate_pointclouds,
