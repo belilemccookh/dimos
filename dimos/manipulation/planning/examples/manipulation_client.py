@@ -321,9 +321,21 @@ def interactive_mode(client: ManipulationClient) -> None:
                         print("Usage: plan pose x y z [roll pitch yaw]")
                         continue
                     x, y, z = float(parts[2]), float(parts[3]), float(parts[4])
-                    roll = float(parts[5]) if len(parts) > 5 else np.pi
-                    pitch = float(parts[6]) if len(parts) > 6 else 0.0
-                    yaw = float(parts[7]) if len(parts) > 7 else 0.0
+                    # If orientation not provided, use current end-effector orientation
+                    if len(parts) > 5:
+                        roll = float(parts[5])
+                        pitch = float(parts[6]) if len(parts) > 6 else 0.0
+                        yaw = float(parts[7]) if len(parts) > 7 else 0.0
+                    else:
+                        # Get current EE pose and use its orientation
+                        ee_pose = client.get_ee_pose()
+                        if ee_pose is not None and len(ee_pose) >= 6:
+                            roll, pitch, yaw = ee_pose[3], ee_pose[4], ee_pose[5]
+                            print(f"Using current orientation: roll={roll:.2f}, pitch={pitch:.2f}, yaw={yaw:.2f}")
+                        else:
+                            # Fallback to default if EE pose not available
+                            roll, pitch, yaw = np.pi, 0.0, 0.0
+                            print("Warning: Could not get current EE pose, using default orientation")
                     success = client.plan_to_pose(x, y, z, roll, pitch, yaw)
                     print(f"Planning success: {success}")
                     if success:
