@@ -20,8 +20,8 @@ import dataclasses
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
-import pickle
 from pathlib import Path
+import pickle
 import threading
 import time
 from typing import Any
@@ -46,49 +46,17 @@ class RerunInfo:
             self.url = f"rerun+http://127.0.0.1:{self.grpc_port}/proxy"
 
 
-class RerunConnection:
-    """One connection per process/thread that knows how to log into Rerun."""
-
-    def __init__(self, info: RerunInfo) -> None:
-        self.info = info
-        self.init_pid = os.getpid()
-        self.stream = rr.RecordingStream(
-            info.logging_id,
-            recording_id=info.logging_id,
-        )
-        self.stream.connect_grpc(info.url)  # type: ignore[arg-type]
-
-    def log(self, path: str, value: Any, **kwargs: Any) -> None:
-        if self.init_pid != os.getpid():
-            raise RuntimeError(
-                "RerunConnection objects must be created and used in the same process."
-            )
-        self.stream.log(path, value, **kwargs)
+info = RerunInfo()
 
 
 class DashboardActor:
     """Tiny inline copy of the Dashboard module that can run as a Dask actor."""
 
-    def __init__(
-        self,
-        info: RerunInfo,
-        *,
-        auto_open: bool = True,
-        host: str = "127.0.0.1",
-        port: int = 4000,
-    ) -> None:
-        self.info = info
-        self.auto_open = auto_open
-        self.host = host
-        self.port = port
-        self._started = False
-        self._server: HTTPServer | None = None
+    def __init__(self) -> None:
+        pass
 
     def start(self) -> str:
-        if self._started:
-            return self.info.url or ""
-
-        rr.init(self.info.logging_id, spawn=False, recording_id=self.info.logging_id)
+        rr.init(info.logging_id, spawn=False, recording_id=info.logging_id)
         default_blueprint = rrb.Blueprint(
             rrb.Tabs(
                 rrb.Spatial3DView(
@@ -101,102 +69,97 @@ class DashboardActor:
         )
         rr.send_blueprint(default_blueprint)
         rr.serve_grpc(
-            grpc_port=self.info.grpc_port,
+            grpc_port=info.grpc_port,
             default_blueprint=default_blueprint,
-            server_memory_limit=self.info.server_memory_limit,
+            server_memory_limit=info.server_memory_limit,
         )
-        self._server, _ = start_dashboard_server_thread(
-            rerun_url=self.info.url or "",
-            host=self.host,
-            port=self.port,
-        )
-        if self.auto_open and self.info.url:
-            # Best-effort browser launch; ignore failures.
-            try:
-                webbrowser.open(f"http://{self.host}:{self.port}")
-            except Exception:
-                pass
 
-        self._started = True
-        return self.info.url or ""
+        #
+        # Manual control of Rerun viewer (simple html server)
+        #
+        host = "127.0.0.1"
+        port = 4000
+        html = f"""<body>
+            <style>body {{ margin: 0; border: 0; }}\ncanvas {{ width: 100vw !important; height: 100vh !important; }}</style>
+            <script type="module">
+                import {{ WebViewer }} from "https://esm.sh/@rerun-io/web-viewer@0.27.2";
+                const viewer = new WebViewer();
+                viewer.start("{info.url}", document.body);
+            </script>
+        </body>"""
 
-    def stop(self) -> bool:
-        if self._server:
-            try:
-                self._server.shutdown()
-            except Exception:
-                pass
-        # There is no explicit shutdown hook for rr.serve_grpc; rely on process exit.
-        self._started = False
-        return True
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path in ("/", "/index.html"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(html.encode("utf-8"))
+                elif self.path == "/health":
+                    body = json.dumps({"status": "ok", "rerun_url": info.url}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
 
+            def log_message(self, format: str, *args: Any) -> None:
+                return
 
-def start_dashboard_server_thread(
-    rerun_url: str,
-    host: str = "127.0.0.1",
-    port: int = 4000,
-) -> tuple[HTTPServer, threading.Thread]:
-    """Spin up a tiny HTTP server that hosts a web viewer pointing at rerun_url."""
-
-    html = f"""<body>
-        <style>body {{ margin: 0; border: 0; }}\ncanvas {{ width: 100vw !important; height: 100vh !important; }}</style>
-        <script type="module">
-            import {{ WebViewer }} from "https://esm.sh/@rerun-io/web-viewer@0.27.2";
-            const viewer = new WebViewer();
-            viewer.start("{rerun_url}", document.body);
-        </script>
-    </body>"""
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path in ("/", "/index.html"):
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(html.encode("utf-8"))
-            elif self.path == "/health":
-                body = json.dumps({"status": "ok", "rerun_url": rerun_url}).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(body)
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-        def log_message(self, format: str, *args: Any) -> None:
-            return
-
-    server = HTTPServer((host, port), Handler)
-    thread = threading.Thread(target=server.serve_forever, name="dashboard-server", daemon=True)
-    thread.start()
-    return server, thread
+        server = HTTPServer((host, port), Handler)
+        thread = threading.Thread(target=server.serve_forever, name="dashboard-server", daemon=True)
+        thread.start()
 
 
 # ------------------------- Data replay as an actor ------------------------- #
-DEFAULT_REPLAY_PATHS: dict[str, str] = {
-    name: str(Path(__file__).with_name(f"example_data_{name}.yaml"))
-    for name in ("lidar", "color_image")
+DEFAULT_REPLAY_PATHS = {
+    "lidar": str(Path(__file__).with_name(f"example_data_{'lidar'}.yaml")),
+    "color_image": str(Path(__file__).with_name(f"example_data_{'color_image'}.yaml")),
 }
 
 
 class DataReplayActor:
     """Reads YAML messages and publishes them to Rerun from a Dask worker."""
 
-    def __init__(
-        self,
-        rerun_info: RerunInfo,
-        *,
-        replay_paths: dict[str, str] | None = None,
-        interval_sec: float = 0.25,
-        loop: bool = True,
-    ) -> None:
-        self.rerun_info = rerun_info
-        self.replay_paths = replay_paths or DEFAULT_REPLAY_PATHS
-        self.interval_sec = interval_sec
-        self.loop = loop
-        self._stop_event = threading.Event()
+    def __init__(self):
         self._threads: list[threading.Thread] = []
+
+    def start(self) -> bool:
+        for output_name, path in DEFAULT_REPLAY_PATHS.items():
+            thread = threading.Thread(
+                target=self._publish_stream,
+                args=(output_name, path),
+                name=f"{output_name}-replay",
+                daemon=True,
+            )
+            self._threads.append(thread)
+            thread.start()
+            time.sleep(0.1)
+        return True
+
+    def _publish_stream(self, output_name: str, path: str) -> None:
+        stream = rr.RecordingStream(
+            info.logging_id,
+            recording_id=info.logging_id,
+        )
+        stream.connect_grpc(info.url)
+        while True:
+            any_sent = False
+            for _i, msg in enumerate(self._iter_messages(path)):
+                try:
+                    if isinstance(msg, tuple) and len(msg) == 2:
+                        log_path, payload = msg
+                    else:
+                        log_path, payload = self._to_rerun_payload(msg, output_name)
+                    print("logging " + log_path)
+                    stream.log(log_path, payload, strict=True)
+                    any_sent = True
+                except Exception as error:
+                    print(f"[DataReplayActor] error while publishing {output_name}: {error}")
+            if not any_sent:
+                break
 
     def _iter_messages(self, path: str):
         file_path = Path(path)
@@ -233,50 +196,6 @@ class DataReplayActor:
             payload = rr.TextLog(str(msg))
         return path, payload
 
-    def _publish_stream(self, output_name: str, path: str) -> None:
-        rc = RerunConnection(self.rerun_info)
-        while not self._stop_event.is_set():
-            any_sent = False
-            for _i, msg in enumerate(self._iter_messages(path)):
-                if self._stop_event.is_set():
-                    break
-                try:
-                    if isinstance(msg, tuple) and len(msg) == 2:
-                        log_path, payload = msg
-                    else:
-                        log_path, payload = self._to_rerun_payload(msg, output_name)
-                    rc.log(log_path, payload, strict=True)
-                    any_sent = True
-                    time.sleep(self.interval_sec)
-                except Exception as error:
-                    print(f"[DataReplayActor] error while publishing {output_name}: {error}")
-            if not self.loop or not any_sent:
-                break
-
-    def start(self) -> bool:
-        if self._threads:
-            return True
-        for output_name, path in self.replay_paths.items():
-            thread = threading.Thread(
-                target=self._publish_stream,
-                args=(output_name, path),
-                name=f"{output_name}-replay",
-                daemon=True,
-            )
-            self._threads.append(thread)
-            thread.start()
-            time.sleep(0.1)
-        return True
-
-    def stop(self) -> bool:
-        self._stop_event.set()
-        for thread in self._threads:
-            try:
-                thread.join(timeout=1.0)
-            except Exception:
-                pass
-        return True
-
 
 # ------------------------------ Entrypoint --------------------------------- #
 def main() -> None:
@@ -286,24 +205,10 @@ def main() -> None:
         n_workers=1,
         threads_per_worker=4,
     )
-    dashboard = client.submit(
-        DashboardActor,
-        rerun_info,
-        auto_open=True,
-        host="127.0.0.1",
-        port=4000,
-        actor=True,
-    ).result()
+    dashboard = client.submit(DashboardActor, actor=True).result()
     dashboard.start().result()
 
-    replayer = client.submit(
-        DataReplayActor,
-        rerun_info,
-        replay_paths=DEFAULT_REPLAY_PATHS,
-        interval_sec=0.25,
-        loop=True,
-        actor=True,
-    ).result()
+    replayer = client.submit(DataReplayActor, actor=True).result()
     replayer.start().result()
 
     print(f"Dashboard running at {rerun_info.url} (Rerun gRPC on port {rerun_info.grpc_port})")
@@ -314,8 +219,6 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        replayer.stop().result()
-        dashboard.stop().result()
         client.close()
 
 
