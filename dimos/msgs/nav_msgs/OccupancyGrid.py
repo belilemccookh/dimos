@@ -30,7 +30,11 @@ from dimos.msgs.geometry_msgs import Pose, Vector3, VectorLike
 from dimos.types.timestamped import Timestamped
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from dimos.msgs.sensor_msgs import PointCloud2
+
+import numpy as np
 
 
 class CostValues(IntEnum):
@@ -59,7 +63,7 @@ class OccupancyGrid(Timestamped):
     ts: float
     frame_id: str
     info: MapMetaData
-    grid: np.ndarray  # type: ignore[type-arg]
+    grid: NDArray[np.int8]
 
     def __init__(
         self,
@@ -214,7 +218,7 @@ class OccupancyGrid(Timestamped):
         """Convert world coordinates to grid coordinates.
 
         Args:
-            point: A vector-like object containing X,Y coordinates
+            point: A vector-like object containing X,Y,Z coordinates
 
         Returns:
             Vector3 with grid coordinates
@@ -497,7 +501,7 @@ class OccupancyGrid(Timestamped):
         distance_cells = ndimage.distance_transform_edt(1 - obstacle_map)
 
         # Convert to meters and clip to max distance
-        distance_meters = np.clip(distance_cells * self.resolution, 0, max_distance)  # type: ignore[operator]
+        distance_meters = np.clip(distance_cells * self.resolution, 0, max_distance)
 
         # Invert and scale to 0-100 range
         # Far from obstacles (max_distance) -> 0

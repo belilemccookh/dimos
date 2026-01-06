@@ -1,0 +1,185 @@
+{
+  "configById": {
+    "3D!3ezwzdr": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 103.2463307782636,
+        "phi": 18.24514050559653,
+        "thetaOffset": 103.85342888790575,
+        "targetOffset": [
+          -1.7630842383954712,
+          -22.780272644204842,
+          2.10032267190303e-15
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {
+        "transforms": {
+          "labelSize": 0.6,
+          "visible": true,
+          "axisSize": 2
+        }
+      },
+      "transforms": {
+        "frame:sensor_at_scan": {
+          "visible": false
+        },
+        "frame:camera_optical": {
+          "visible": false
+        },
+        "frame:camera_link": {
+          "visible": false
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:sensor": {
+          "visible": false
+        },
+        "frame:map": {
+          "visible": true
+        }
+      },
+      "topics": {
+        "/lidar": {
+          "visible": true,
+          "colorField": "z",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 10,
+          "decayTime": 0,
+          "explicitAlpha": 0.7
+        },
+        "/detectorDB/scene_update": {
+          "visible": true
+        },
+        "/path_active": {
+          "visible": true,
+          "lineWidth": 0.05,
+          "gradient": [
+            "#00ff1eff",
+            "#6bff6e80"
+          ]
+        },
+        "/map": {
+          "visible": false,
+          "colorField": "intensity",
+          "colorMode": "colormap",
+          "colorMap": "turbo"
+        },
+        "/image": {
+          "visible": true,
+          "cameraInfoTopic": "/camera_info",
+          "distance": 1.5
+        },
+        "/camera_info": {
+          "visible": true,
+          "distance": 1.5,
+          "color": "#86c3ffff"
+        },
+        "/detectorDB/pointcloud/0": {
+          "visible": true,
+          "colorField": "intensity",
+          "colorMode": "flat",
+          "colorMap": "turbo",
+          "pointShape": "cube",
+          "pointSize": 2,
+          "flatColor": "#00ff00ff",
+          "cubeSize": 0.03
+        },
+        "/detectorDB/pointcloud/1": {
+          "visible": true,
+          "colorField": "intensity",
+          "colorMode": "flat",
+          "colorMap": "turbo",
+          "pointShape": "cube",
+          "cubeSize": 0.03,
+          "flatColor": "#ff0000ff"
+        },
+        "/detectorDB/pointcloud/2": {
+          "visible": true,
+          "colorField": "intensity",
+          "colorMode": "flat",
+          "colorMap": "turbo",
+          "pointShape": "cube",
+          "cubeSize": 0.03,
+          "flatColor": "#00aaffff"
+        },
+        "/costmap": {
+          "visible": true,
+          "unknownColor": "#00000000",
+          "minColor": "#31487a57",
+          "maxColor": "#000000ff"
+        },
+        "/pose": {
+          "visible": false,
+          "axisScale": 5
+        },
+        "/target": {
+          "visible": true,
+          "axisScale": 5
+        }
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "drawBehind": false,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "8cb9fe46-7478-4aa6-95c5-75c511fee62d",
+          "layerId": "foxglove.Grid",
+          "size": 100,
+          "color": "#003d477a",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "frameId": "base_link",
+          "divisions": 50,
+          "lineWidth": 2
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "imageMode": {},
+      "followTf": "base_link",
+      "fixedFrame": "world"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "drawerConfig": {
+    "tracks": []
+  },
+  "layout": "3D!3ezwzdr"
+}
