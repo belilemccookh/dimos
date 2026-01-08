@@ -107,7 +107,7 @@ def main():
         selected_features = cli_features or []
     else:
         system_analysis, selected_features = phase0(cli_features)
-    
+
     # make selection known to docker and flake.nix
     os.environ["DIMOS_ENABLED_FEATURES"] = ",".join(selected_features)
 

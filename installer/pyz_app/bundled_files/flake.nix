@@ -34,7 +34,7 @@
         # ------------------------------------------------------------
         shellHook = ''
           ${dimos.shellHook}
-          
+
           # hide the messy nix shell prompt
           if [ "$SHELL" = "bash" ]; then
               export PS1="DimOS dev-shell
@@ -93,7 +93,7 @@ except: exit(1)" 2>/dev/null; then
                   pip install 'dimos['"$DIMOS_ENABLED_FEATURES"'] @ git+ssh://git@github.com/dimensionalOS/dimos.git'
                 fi
               else
-                echo 
+                echo
                 echo "Don't forget to run: pip install dimos"
               fi
             fi
