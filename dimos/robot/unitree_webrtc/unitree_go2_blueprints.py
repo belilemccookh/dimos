@@ -70,14 +70,14 @@ mac = autoconnect(
 
 linux = autoconnect(foxglove_bridge())
 
-# Keep voxel_map compute resolution and Rerun render box size in sync.
+# Voxel map resolution.
 _VOXEL_SIZE = 0.1
 
 basic = autoconnect(
     go2_connection(),
     linux if platform.system() == "Linux" else mac,
     websocket_vis(),
-    rerun_viz(voxel_box_size=_VOXEL_SIZE, voxel_colormap="turbo"),
+    rerun_viz(),
 ).global_config(n_dask_workers=4, robot_model="unitree_go2")
 
 nav = autoconnect(

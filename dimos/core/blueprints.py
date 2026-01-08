@@ -61,6 +61,15 @@ class ModuleBlueprintSet:
         default_factory=lambda: MappingProxyType({})
     )
     requirement_checks: tuple[Callable[[], str | None], ...] = field(default_factory=tuple)
+    # Optional hooks invoked after transports/RPCs are wired but before modules start.
+    # This is intentionally generic (core stays visualization-agnostic).
+    pre_start_hooks: tuple[
+        Callable[["ModuleBlueprintSet", ModuleCoordinator, GlobalConfig], None], ...
+    ] = field(
+        default_factory=tuple,
+        compare=False,
+        repr=False,
+    )
 
     def transports(self, transports: dict[tuple[str, type], Any]) -> "ModuleBlueprintSet":
         return ModuleBlueprintSet(
@@ -69,6 +78,7 @@ class ModuleBlueprintSet:
             global_config_overrides=self.global_config_overrides,
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks,
+            pre_start_hooks=self.pre_start_hooks,
         )
 
     def global_config(self, **kwargs: Any) -> "ModuleBlueprintSet":
@@ -78,6 +88,7 @@ class ModuleBlueprintSet:
             global_config_overrides=MappingProxyType({**self.global_config_overrides, **kwargs}),
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks,
+            pre_start_hooks=self.pre_start_hooks,
         )
 
     def remappings(self, remappings: list[tuple[type[Module], str, str]]) -> "ModuleBlueprintSet":
@@ -91,6 +102,7 @@ class ModuleBlueprintSet:
             global_config_overrides=self.global_config_overrides,
             remapping_map=MappingProxyType(remappings_dict),
             requirement_checks=self.requirement_checks,
+            pre_start_hooks=self.pre_start_hooks,
         )
 
     def requirements(self, *checks: Callable[[], str | None]) -> "ModuleBlueprintSet":
@@ -100,6 +112,26 @@ class ModuleBlueprintSet:
             global_config_overrides=self.global_config_overrides,
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks + tuple(checks),
+            pre_start_hooks=self.pre_start_hooks,
+        )
+
+    def pre_start(
+        self,
+        *hooks: Callable[["ModuleBlueprintSet", ModuleCoordinator, GlobalConfig], None],
+    ) -> "ModuleBlueprintSet":
+        """Register hooks to run before starting modules.
+
+        Hooks are executed after transports and RPC links are set up, but before
+        `start_all_modules()`. This is useful for optional integrations that need
+        to configure running modules without contaminating core.
+        """
+        return ModuleBlueprintSet(
+            blueprints=self.blueprints,
+            transport_map=self.transport_map,
+            global_config_overrides=self.global_config_overrides,
+            remapping_map=self.remapping_map,
+            requirement_checks=self.requirement_checks,
+            pre_start_hooks=self.pre_start_hooks + tuple(hooks),
         )
 
     def _get_transport_for(self, name: str, type: type) -> Any:
@@ -301,6 +333,9 @@ class ModuleBlueprintSet:
         self._connect_transports(module_coordinator)
         self._connect_rpc_methods(module_coordinator)
 
+        for hook in self.pre_start_hooks:
+            hook(self, module_coordinator, global_config)
+
         module_coordinator.start_all_modules()
 
         return module_coordinator
@@ -349,6 +384,7 @@ def autoconnect(*blueprints: ModuleBlueprintSet) -> ModuleBlueprintSet:
         reduce(operator.iadd, [list(x.remapping_map.items()) for x in blueprints], [])
     )
     all_requirement_checks = tuple(check for bs in blueprints for check in bs.requirement_checks)
+    all_pre_start_hooks = tuple(hook for bs in blueprints for hook in bs.pre_start_hooks)
 
     return ModuleBlueprintSet(
         blueprints=all_blueprints,
@@ -356,6 +392,7 @@ def autoconnect(*blueprints: ModuleBlueprintSet) -> ModuleBlueprintSet:
         global_config_overrides=MappingProxyType(all_config_overrides),
         remapping_map=MappingProxyType(all_remappings),
         requirement_checks=all_requirement_checks,
+        pre_start_hooks=all_pre_start_hooks,
     )
 
 

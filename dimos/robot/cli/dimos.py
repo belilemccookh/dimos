@@ -21,7 +21,7 @@ import typer
 
 from dimos.core.blueprints import autoconnect
 from dimos.core.global_config import GlobalConfig
-from dimos.dashboard.rerun_dashboard import init_rerun_if_enabled, send_global_blueprint
+from dimos.dashboard import init_rerun_if_enabled
 from dimos.protocol import pubsub
 from dimos.robot.all_blueprints import all_blueprints, get_blueprint_by_name, get_module_by_name
 from dimos.robot.cli.topic import topic_echo, topic_send
@@ -120,8 +120,6 @@ def run(
         loaded_modules = [get_module_by_name(mod_name) for mod_name in extra_modules]  # type: ignore[attr-defined]
         blueprint = autoconnect(blueprint, *loaded_modules)
 
-    # Resolve the final GlobalConfig before build() so we can initialize the dashboard
-    # (Rerun server/viewer) in the integration layer without contaminating core.
     global_config = GlobalConfig().model_copy(update=cli_config_overrides)
     global_config = global_config.model_copy(
         update=dict(getattr(blueprint, "global_config_overrides", {}))
@@ -129,9 +127,6 @@ def run(
     global_config = init_rerun_if_enabled(global_config)
 
     dimos = blueprint.build(global_config=global_config)
-
-    # UI layout is owned by the dashboard layer.
-    send_global_blueprint(global_config)
     dimos.loop()
 
 

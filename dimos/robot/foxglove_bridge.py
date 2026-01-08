@@ -55,7 +55,7 @@ class FoxgloveBridge(Module):
     @rpc
     def start(self) -> None:
         super().start()
-
+        
         # Skip if Rerun is the selected viewer backend
         if self._global_config and self._global_config.viewer_backend.startswith("rerun"):
             logger.info(

@@ -15,8 +15,8 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+import importlib
 import inspect
-import logging
 import sys
 import threading
 from typing import (
@@ -29,6 +29,7 @@ from typing import (
 
 from dask.distributed import Actor, get_worker
 from reactivex.disposable import CompositeDisposable
+from reactivex.disposable import Disposable
 from typing_extensions import TypeVar
 
 from dimos.core import colors
@@ -371,6 +372,77 @@ class DaskModule(ModuleBase[ModuleConfigT]):
             raise TypeError(f"Output {stream_name} is not a valid stream")
 
         stream._transport = transport
+        return True
+
+    @rpc
+    def install_out_tap(self, out_name: str, factory: str, config: dict[str, Any] | None = None) -> bool:
+        """Install a best-effort Out.tap callback on this module.
+
+        This is intentionally generic and does not reference any visualization system.
+        The callback is created locally on the worker by importing `factory`.
+
+        Args:
+            out_name: Name of the Out[...] attribute on this module.
+            factory: Import path in the form "some.module:factory_fn".
+            config: Keyword arguments passed to the factory function.
+
+        Returns:
+            True if the tap was installed.
+        """
+        stream = getattr(self, out_name, None)
+        if stream is None or not isinstance(stream, Out):
+            raise ValueError(f"{out_name} is not an Out stream on {self.__class__.__name__}")
+
+        if ":" not in factory:
+            raise ValueError('factory must be in the form "some.module:factory_fn"')
+        module_path, fn_name = factory.split(":", 1)
+        mod = importlib.import_module(module_path)
+        fn = getattr(mod, fn_name, None)
+        if fn is None or not callable(fn):
+            raise ValueError(f"Tap factory not found/callable: {factory}")
+
+        cb = fn(**(config or {}))
+        if not callable(cb):
+            raise ValueError(f"Tap factory did not return a callable: {factory}")
+
+        unsub = stream.tap(cb)
+        self._disposables.add(Disposable(unsub))
+        return True
+
+    @rpc
+    def install_tf_tap(self, factory: str, config: dict[str, Any] | None = None) -> bool:
+        """Install a best-effort TF tap callback on this module's TF publisher.
+
+        This is intentionally generic and does not reference any visualization system.
+        The callback is created locally on the worker by importing `factory`.
+
+        Args:
+            factory: Import path in the form "some.module:factory_fn".
+            config: Keyword arguments passed to the factory function.
+
+        Returns:
+            True if the tap was installed.
+        """
+        tf = getattr(self, "tf", None)
+        if tf is None:
+            raise ValueError(f"TF is not available on {self.__class__.__name__}")
+        if not hasattr(tf, "tap"):
+            raise ValueError(f"TF implementation on {self.__class__.__name__} does not support tap()")
+
+        if ":" not in factory:
+            raise ValueError('factory must be in the form "some.module:factory_fn"')
+        module_path, fn_name = factory.split(":", 1)
+        mod = importlib.import_module(module_path)
+        fn = getattr(mod, fn_name, None)
+        if fn is None or not callable(fn):
+            raise ValueError(f"Tap factory not found/callable: {factory}")
+
+        cb = fn(**(config or {}))
+        if not callable(cb):
+            raise ValueError(f"Tap factory did not return a callable: {factory}")
+
+        unsub = tf.tap(cb)  # type: ignore[no-untyped-call]
+        self._disposables.add(Disposable(unsub))
         return True
 
     # called from remote

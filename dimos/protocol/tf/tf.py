@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from functools import reduce
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from dimos.msgs.geometry_msgs import Transform
 from dimos.msgs.tf2_msgs import TFMessage
@@ -26,6 +28,9 @@ from dimos.protocol.pubsub.lcmpubsub import LCM, Topic
 from dimos.protocol.pubsub.spec import PubSub
 from dimos.protocol.service.lcmservice import Service  # type: ignore[attr-defined]
 from dimos.types.timestamped import TimestampedCollection
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 CONFIG = TypeVar("CONFIG")
 
@@ -277,6 +282,7 @@ class PubSubTF(MultiTBuffer, TFSpec):
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         TFSpec.__init__(self, **kwargs)
         MultiTBuffer.__init__(self, self.config.buffer_size)
+        self._taps: list[Callable[[TFMessage], None]] = []
 
         pubsub_config = getattr(self.config, "pubsub", None)
         if pubsub_config is not None:
@@ -300,6 +306,18 @@ class PubSubTF(MultiTBuffer, TFSpec):
     def stop(self) -> None:
         self.pubsub.stop()
 
+    def tap(self, cb: Callable[[TFMessage], None]) -> Callable[[], None]:
+        """Run cb(tf_msg) on every publish (best-effort, local, pre-transport)."""
+        self._taps.append(cb)
+
+        def _unsub() -> None:
+            try:
+                self._taps.remove(cb)
+            except ValueError:
+                pass
+
+        return _unsub
+
     def publish(self, *args: Transform) -> None:
         """Send transforms using the configured PubSub."""
         if not self.pubsub:
@@ -308,7 +326,14 @@ class PubSubTF(MultiTBuffer, TFSpec):
         self.receive_transform(*args)
         topic = getattr(self.config, "topic", None)
         if topic:
-            self.pubsub.publish(topic, TFMessage(*args))
+            msg = TFMessage(*args)
+            for cb in tuple(self._taps):
+                try:
+                    cb(msg)
+                except Exception:
+                    # Best-effort: never break TF publishing due to a tap.
+                    pass
+            self.pubsub.publish(topic, msg)
 
     def publish_static(self, *args: Transform) -> None:
         raise NotImplementedError("Static transforms not implemented in PubSubTF.")

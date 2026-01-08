@@ -34,6 +34,9 @@ class GlobalConfig(BaseSettings):
     replay: bool = False
     rerun_enabled: bool = True
     rerun_server_addr: str | None = None
+    # Recording id shared across processes so that worker logs (Out taps) and TF logs
+    # participate in the same Rerun recording.
+    rerun_recording_id: str | None = None
     viewer_backend: ViewerBackend = "rerun-native"
     n_dask_workers: int = 2
     memory_limit: str = "auto"
