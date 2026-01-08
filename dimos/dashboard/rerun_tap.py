@@ -183,7 +183,7 @@ def make_rerun_tap(
         except Exception:
             # Best-effort: never break the producer due to visualization conversion.
             return
-        
+
         # A message may intentionally opt out of Rerun logging.
         if data is None:
             return
