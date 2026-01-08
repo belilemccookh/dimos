@@ -21,9 +21,8 @@ from openpi_client import websocket_client_policy
 from xarm.wrapper import XArmAPI
 
 from dimos.core.transport import LCMTransport
-from dimos.msgs.sensor_msgs import Image, JointState
+from dimos.msgs.sensor_msgs import Image, JointCommand, JointState
 from dimos.msgs.sensor_msgs.image_impls.AbstractImage import ImageFormat
-from dimos.msgs.sensor_msgs import JointState, JointCommand
 
 ACTION_HORIZON = 15
 ACTION_CHUNK = None
@@ -129,7 +128,7 @@ def run_inference():
         joint_cmd_pub.broadcast(None, JointCommand(joint_positions_rad))
         # IT'S NOT SENDING COMMANDS TO THE ROBOT :((
 
-        time.sleep(.2)
+        time.sleep(0.2)
 
 
 if __name__ == "__main__":
