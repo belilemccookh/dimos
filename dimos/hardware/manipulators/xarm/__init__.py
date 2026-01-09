@@ -24,6 +24,9 @@ Usage:
 
 from dimos.hardware.manipulators.xarm.arm import XArm, XArmConfig, xarm
 from dimos.hardware.manipulators.xarm.backend import XArmBackend
+
+# Backwards compatibility alias
+XArmDriver = XArm
 from dimos.hardware.manipulators.xarm.blueprints import (
     xarm5_servo,
     xarm7_servo,
@@ -37,6 +40,7 @@ __all__ = [
     "XArm",
     "XArmBackend",
     "XArmConfig",
+    "XArmDriver",  # Backwards compatibility alias
     "xarm",
     "xarm5_servo",
     "xarm7_servo",

@@ -236,7 +236,7 @@ class TickLoop:
         commands: list[tuple[ControlTask, ResourceClaim, JointCommandOutput | None]],
     ) -> tuple[
         dict[str, tuple[float, ControlMode, str]],
-        dict[str, set[str]],
+        dict[str, dict[str, str]],
     ]:
         """Per-joint arbitration with mode conflict detection.
 

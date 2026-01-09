@@ -23,6 +23,7 @@ This driver:
 from dataclasses import dataclass, field
 import threading
 import time
+from typing import Any
 
 from dimos.core import In, Module, ModuleConfig, Out, rpc
 from dimos.hardware.manipulators.piper.backend import PiperBackend
@@ -99,8 +100,8 @@ class Piper(Module[PiperConfig]):
     def __init__(
         self,
         backend: ManipulatorBackend | None = None,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
 

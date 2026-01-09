@@ -321,7 +321,7 @@ def wait_for_completion(client: OrchestratorClient, task_name: str, timeout: flo
     while time.time() - start < timeout:
         status = client.get_trajectory_status(task_name)
         if not status.get("active", False):
-            state = status.get("state", "UNKNOWN")
+            state: str = status.get("state", "UNKNOWN")
             print(f"\nTrajectory finished: {state}")
             return state == "COMPLETED"
 
@@ -508,10 +508,10 @@ def interactive_mode(client: OrchestratorClient, initial_task: str) -> None:
                 print("\nTasks:")
                 for t in tasks:
                     marker = "* " if t == current_task else "  "
-                    status = " [ACTIVE]" if t in active else ""
+                    active_marker = " [ACTIVE]" if t in active else ""
                     t_joints = client.get_task_joints(t) if t in client._task_joints else []
                     joint_count = len(t_joints) if t_joints else "?"
-                    print(f"{marker}{t} ({joint_count} joints){status}")
+                    print(f"{marker}{t} ({joint_count} joints){active_marker}")
 
             elif cmd == "switch":
                 if len(parts) < 2:

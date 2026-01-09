@@ -226,49 +226,34 @@ xarm_cartesian = autoconnect(
 # Each arm has its own topics for joint states and commands.
 # =============================================================================
 
-xarm_dual = (
-    autoconnect(
-        XArmLeft.blueprint(
-            ip="192.168.2.235",  # XArm7 - Left arm
-            dof=7,
-            control_rate=100.0,
-            monitor_rate=10.0,
+xarm_dual = autoconnect(
+    XArmLeft.blueprint(
+        ip="192.168.2.235",  # XArm7 - Left arm
+        dof=7,
+        control_rate=100.0,
+        monitor_rate=10.0,
+    ),
+    XArmRight.blueprint(
+        ip="192.168.1.210",  # XArm6 - Right arm
+        dof=6,
+        control_rate=100.0,
+        monitor_rate=10.0,
+    ),
+).transports(
+    {
+        # Left arm (XArm7) topics - use remapped names
+        ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
+        ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
+        ("left_joint_position_command", JointCommand): LCMTransport(
+            "/xarm/left/joint_position_command", JointCommand
         ),
-        XArmRight.blueprint(
-            ip="192.168.1.210",  # XArm6 - Right arm
-            dof=6,
-            control_rate=100.0,
-            monitor_rate=10.0,
+        # Right arm (XArm6) topics - use remapped names
+        ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
+        ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
+        ("right_joint_position_command", JointCommand): LCMTransport(
+            "/xarm/right/joint_position_command", JointCommand
         ),
-    )
-    .remappings(
-        [
-            # Remap left arm connections to unique names
-            (XArmLeft, "joint_state", "left_joint_state"),
-            (XArmLeft, "robot_state", "left_robot_state"),
-            (XArmLeft, "joint_position_command", "left_joint_position_command"),
-            # Remap right arm connections to unique names
-            (XArmRight, "joint_state", "right_joint_state"),
-            (XArmRight, "robot_state", "right_robot_state"),
-            (XArmRight, "joint_position_command", "right_joint_position_command"),
-        ]
-    )
-    .transports(
-        {
-            # Left arm (XArm7) topics - use remapped names
-            ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
-            ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
-            ("left_joint_position_command", JointCommand): LCMTransport(
-                "/xarm/left/joint_position_command", JointCommand
-            ),
-            # Right arm (XArm6) topics - use remapped names
-            ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
-            ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
-            ("right_joint_position_command", JointCommand): LCMTransport(
-                "/xarm/right/joint_position_command", JointCommand
-            ),
-        }
-    )
+    }
 )
 
 
@@ -279,83 +264,50 @@ xarm_dual = (
 # Each arm has independent trajectory execution.
 # =============================================================================
 
-xarm_dual_trajectory = (
-    autoconnect(
-        # Left arm (XArm7)
-        XArmLeft.blueprint(
-            ip="192.168.2.235",
-            dof=7,
-            control_rate=100.0,
-            monitor_rate=10.0,
+xarm_dual_trajectory = autoconnect(
+    # Left arm (XArm7)
+    XArmLeft.blueprint(
+        ip="192.168.2.235",
+        dof=7,
+        control_rate=100.0,
+        monitor_rate=10.0,
+    ),
+    # Right arm (XArm6)
+    XArmRight.blueprint(
+        ip="192.168.1.210",
+        dof=6,
+        control_rate=100.0,
+        monitor_rate=10.0,
+    ),
+    # Left trajectory controller
+    JointTrajectoryControllerLeft.blueprint(
+        control_frequency=100.0,
+    ),
+    # Right trajectory controller
+    JointTrajectoryControllerRight.blueprint(
+        control_frequency=100.0,
+    ),
+).transports(
+    {
+        # Left arm topics
+        ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
+        ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
+        ("left_joint_position_command", JointCommand): LCMTransport(
+            "/xarm/left/joint_position_command", JointCommand
         ),
-        # Right arm (XArm6)
-        XArmRight.blueprint(
-            ip="192.168.1.210",
-            dof=6,
-            control_rate=100.0,
-            monitor_rate=10.0,
+        ("left_trajectory", JointTrajectory): LCMTransport(
+            "/xarm/left/trajectory", JointTrajectory
         ),
-        # Left trajectory controller
-        JointTrajectoryControllerLeft.blueprint(
-            control_frequency=100.0,
+        # Right arm topics
+        ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
+        ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
+        ("right_joint_position_command", JointCommand): LCMTransport(
+            "/xarm/right/joint_position_command", JointCommand
         ),
-        # Right trajectory controller
-        JointTrajectoryControllerRight.blueprint(
-            control_frequency=100.0,
+        ("right_trajectory", JointTrajectory): LCMTransport(
+            "/xarm/right/trajectory", JointTrajectory
         ),
-    )
-    .remappings(
-        [
-            # Left arm connections
-            (XArmLeft, "joint_state", "left_joint_state"),
-            (XArmLeft, "robot_state", "left_robot_state"),
-            (XArmLeft, "joint_position_command", "left_joint_position_command"),
-            # Right arm connections
-            (XArmRight, "joint_state", "right_joint_state"),
-            (XArmRight, "robot_state", "right_robot_state"),
-            (XArmRight, "joint_position_command", "right_joint_position_command"),
-            # Left controller connections - connect to left arm
-            (JointTrajectoryControllerLeft, "joint_state", "left_joint_state"),
-            (JointTrajectoryControllerLeft, "robot_state", "left_robot_state"),
-            (
-                JointTrajectoryControllerLeft,
-                "joint_position_command",
-                "left_joint_position_command",
-            ),
-            (JointTrajectoryControllerLeft, "trajectory", "left_trajectory"),
-            # Right controller connections - connect to right arm
-            (JointTrajectoryControllerRight, "joint_state", "right_joint_state"),
-            (JointTrajectoryControllerRight, "robot_state", "right_robot_state"),
-            (
-                JointTrajectoryControllerRight,
-                "joint_position_command",
-                "right_joint_position_command",
-            ),
-            (JointTrajectoryControllerRight, "trajectory", "right_trajectory"),
-        ]
-    )
-    .transports(
-        {
-            # Left arm topics
-            ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
-            ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
-            ("left_joint_position_command", JointCommand): LCMTransport(
-                "/xarm/left/joint_position_command", JointCommand
-            ),
-            ("left_trajectory", JointTrajectory): LCMTransport(
-                "/xarm/left/trajectory", JointTrajectory
-            ),
-            # Right arm topics
-            ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
-            ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
-            ("right_joint_position_command", JointCommand): LCMTransport(
-                "/xarm/right/joint_position_command", JointCommand
-            ),
-            ("right_trajectory", JointTrajectory): LCMTransport(
-                "/xarm/right/trajectory", JointTrajectory
-            ),
-        }
-    )
+    }
 )
 
 

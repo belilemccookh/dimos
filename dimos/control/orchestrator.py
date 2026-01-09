@@ -387,7 +387,7 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                 f"Executing trajectory on {task_name}: "
                 f"{len(trajectory.points)} points, duration={trajectory.duration:.3f}s"
             )
-            return task.execute(trajectory, t_now)
+            return task.execute(trajectory, t_now)  # type: ignore[attr-defined,no-any-return]
 
     @rpc
     def get_trajectory_status(self, task_name: str) -> dict[str, Any]:
@@ -423,7 +423,7 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                 return False
 
             logger.info(f"Cancelling trajectory on {task_name}")
-            return task.cancel()
+            return task.cancel()  # type: ignore[attr-defined,no-any-return]
 
     # =========================================================================
     # Lifecycle
