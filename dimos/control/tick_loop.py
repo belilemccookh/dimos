@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from dimos.control.task import (
     ControlTask,
@@ -48,6 +48,15 @@ if TYPE_CHECKING:
     from dimos.hardware.manipulators.spec import ControlMode
 
 logger = setup_logger()
+
+
+class JointWinner(NamedTuple):
+    """Tracks the winning task for a joint during arbitration."""
+
+    priority: int
+    value: float
+    mode: ControlMode
+    task_name: str
 
 
 class TickLoop:
@@ -252,9 +261,8 @@ class TickLoop:
             - joint_commands: {joint_name: (value, mode, task_name)}
             - preemptions: {preempted_task: {joint: winning_task}}
         """
-        # Track winner per joint: joint -> (priority, value, mode, task_name)
-        winners: dict[str, tuple[int, float, ControlMode, str]] = {}
-        preemptions: dict[str, dict[str, str]] = {}
+        winners: dict[str, JointWinner] = {}  # joint_name -> current winner
+        preemptions: dict[str, dict[str, str]] = {}  # loser_task -> {joint: winner_task}
 
         for task, claim, output in commands:
             if output is None:
@@ -265,43 +273,37 @@ class TickLoop:
                 continue
 
             for i, joint_name in enumerate(output.joint_names):
-                value = values[i]
-                priority = claim.priority
-                mode = output.mode
+                candidate = JointWinner(claim.priority, values[i], output.mode, task.name)
 
+                # First claim on this joint
                 if joint_name not in winners:
-                    # First claim on this joint
-                    winners[joint_name] = (priority, value, mode, task.name)
+                    winners[joint_name] = candidate
+                    continue
 
-                elif priority > winners[joint_name][0]:
-                    # Higher priority wins - track preemption
-                    old_task = winners[joint_name][3]
-                    if old_task not in preemptions:
-                        preemptions[old_task] = {}
-                    preemptions[old_task][joint_name] = task.name
-                    winners[joint_name] = (priority, value, mode, task.name)
+                current = winners[joint_name]
 
-                elif priority == winners[joint_name][0]:
-                    # Same priority
-                    if mode != winners[joint_name][2]:
-                        # Mode conflict at same priority - log and drop
-                        winning_task = winners[joint_name][3]
-                        logger.warning(
-                            f"Mode conflict on {joint_name}: {task.name} wants "
-                            f"{mode.name}, but {winning_task} wants "
-                            f"{winners[joint_name][2].name}. Dropping {task.name}."
-                        )
-                        # Notify dropped task of preemption
-                        if task.name not in preemptions:
-                            preemptions[task.name] = {}
-                        preemptions[task.name][joint_name] = winning_task
-                    # If same mode and same priority, first wins (keep existing)
+                # Lower priority - skip
+                if candidate.priority < current.priority:
+                    continue
 
-        # Convert to simplified output: joint -> (value, mode, task_name)
-        joint_commands = {
-            joint: (value, mode, task_name)
-            for joint, (_, value, mode, task_name) in winners.items()
-        }
+                # Higher priority - take over
+                if candidate.priority > current.priority:
+                    preemptions.setdefault(current.task_name, {})[joint_name] = task.name
+                    winners[joint_name] = candidate
+                    continue
+
+                # Same priority - check for mode conflict
+                if candidate.mode != current.mode:
+                    logger.warning(
+                        f"Mode conflict on {joint_name}: {task.name} wants "
+                        f"{candidate.mode.name}, but {current.task_name} wants "
+                        f"{current.mode.name}. Dropping {task.name}."
+                    )
+                    preemptions.setdefault(task.name, {})[joint_name] = current.task_name
+                # Same priority + same mode: first wins (keep current)
+
+        # Convert to output format: joint -> (value, mode, task_name)
+        joint_commands = {joint: (w.value, w.mode, w.task_name) for joint, w in winners.items()}
 
         return joint_commands, preemptions
 

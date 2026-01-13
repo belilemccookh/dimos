@@ -152,13 +152,15 @@ class JointCommandOutput:
 
     def get_values(self) -> list[float] | None:
         """Get the active values based on mode."""
-        if self.mode == ControlMode.POSITION:
-            return self.positions
-        elif self.mode == ControlMode.VELOCITY:
-            return self.velocities
-        elif self.mode == ControlMode.TORQUE:
-            return self.efforts
-        return None
+        match self.mode:
+            case ControlMode.POSITION:
+                return self.positions
+            case ControlMode.VELOCITY:
+                return self.velocities
+            case ControlMode.TORQUE:
+                return self.efforts
+            case _:
+                return None
 
 
 # =============================================================================

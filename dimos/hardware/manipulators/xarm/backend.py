@@ -45,7 +45,35 @@ class XArmBackend:
     - Angles: XArm uses degrees, we use radians
     - Positions: XArm uses mm, we use meters
     - Velocities: XArm uses deg/s, we use rad/s
+
+    TODO: Consider creating XArmPose/XArmVelocity types to encapsulate
+    unit conversions instead of helper methods. See ManipulatorPose discussion.
     """
+
+    # =========================================================================
+    # Unit Conversions (SI <-> XArm units)
+    # =========================================================================
+
+    @staticmethod
+    def _m_to_mm(m: float) -> float:
+        return m * 1000.0
+
+    @staticmethod
+    def _mm_to_m(mm: float) -> float:
+        return mm / 1000.0
+
+    @staticmethod
+    def _rad_to_deg(rad: float) -> float:
+        return math.degrees(rad)
+
+    @staticmethod
+    def _deg_to_rad(deg: float) -> float:
+        return math.radians(deg)
+
+    @staticmethod
+    def _velocity_to_speed_mm(velocity: float) -> float:
+        """Convert 0-1 velocity fraction to mm/s (max ~500 mm/s)."""
+        return velocity * 500
 
     def __init__(self, ip: str, dof: int = 6) -> None:
         self._ip = ip
@@ -289,12 +317,12 @@ class XArmBackend:
         _, pose = self._arm.get_position()
         if pose and len(pose) >= 6:
             return {
-                "x": pose[0] / 1000.0,  # mm -> m
-                "y": pose[1] / 1000.0,
-                "z": pose[2] / 1000.0,
-                "roll": math.radians(pose[3]),
-                "pitch": math.radians(pose[4]),
-                "yaw": math.radians(pose[5]),
+                "x": self._mm_to_m(pose[0]),
+                "y": self._mm_to_m(pose[1]),
+                "z": self._mm_to_m(pose[2]),
+                "roll": self._deg_to_rad(pose[3]),
+                "pitch": self._deg_to_rad(pose[4]),
+                "yaw": self._deg_to_rad(pose[5]),
             }
         return None
 
@@ -307,25 +335,14 @@ class XArmBackend:
         if not self._arm:
             return False
 
-        # Convert to XArm units
-        x = pose.get("x", 0) * 1000.0  # m -> mm
-        y = pose.get("y", 0) * 1000.0
-        z = pose.get("z", 0) * 1000.0
-        roll = math.degrees(pose.get("roll", 0))
-        pitch = math.degrees(pose.get("pitch", 0))
-        yaw = math.degrees(pose.get("yaw", 0))
-
-        # Speed in mm/s (max ~1000 mm/s)
-        speed = velocity * 500
-
         code: int = self._arm.set_position(
-            x=x,
-            y=y,
-            z=z,
-            roll=roll,
-            pitch=pitch,
-            yaw=yaw,
-            speed=speed,
+            x=self._m_to_mm(pose.get("x", 0)),
+            y=self._m_to_mm(pose.get("y", 0)),
+            z=self._m_to_mm(pose.get("z", 0)),
+            roll=self._rad_to_deg(pose.get("roll", 0)),
+            pitch=self._rad_to_deg(pose.get("pitch", 0)),
+            yaw=self._rad_to_deg(pose.get("yaw", 0)),
+            speed=self._velocity_to_speed_mm(velocity),
             wait=False,
         )
         return code == 0

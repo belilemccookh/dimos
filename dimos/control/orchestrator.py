@@ -27,6 +27,7 @@ Features:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import threading
 import time
@@ -183,9 +184,8 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
 
         try:
             for hw_cfg in self.config.hardware:
-                backend = None
+                backend = self._create_backend_from_config(hw_cfg)
                 try:
-                    backend = self._create_backend_from_config(hw_cfg)
                     if not backend.connect():
                         raise RuntimeError(f"Failed to connect to {hw_cfg.type} backend")
 
@@ -200,12 +200,10 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                     hardware_added.append(hw_cfg.id)
                 except Exception as e:
                     logger.error(f"Failed to setup hardware {hw_cfg.id}: {e}")
-                    # Clean up connected backend on failure
-                    if backend is not None and hasattr(backend, "disconnect"):
-                        try:
-                            backend.disconnect()
-                        except Exception:
-                            pass  # Best effort cleanup
+                    try:
+                        backend.disconnect()
+                    except Exception:
+                        pass  # Best effort cleanup
                     raise
 
             for task_cfg in self.config.tasks:
@@ -227,27 +225,23 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
 
     def _create_backend_from_config(self, cfg: HardwareConfig) -> ManipulatorBackend:
         """Create a manipulator backend from config."""
-        backend_type = cfg.type.lower()
+        match cfg.type.lower():
+            case "mock":
+                from dimos.hardware.manipulators.mock import MockBackend
 
-        if backend_type == "mock":
-            from dimos.hardware.manipulators.mock import MockBackend
+                return MockBackend(dof=cfg.dof)
+            case "xarm":
+                if cfg.ip is None:
+                    raise ValueError("ip is required for xarm backend")
+                from dimos.hardware.manipulators.xarm import XArmBackend
 
-            return MockBackend(dof=cfg.dof)
+                return XArmBackend(ip=cfg.ip, dof=cfg.dof)
+            case "piper":
+                from dimos.hardware.manipulators.piper import PiperBackend
 
-        elif backend_type == "xarm":
-            if cfg.ip is None:
-                raise ValueError("ip is required for xarm backend")
-            from dimos.hardware.manipulators.xarm import XArmBackend
-
-            return XArmBackend(ip=cfg.ip, dof=cfg.dof)
-
-        elif backend_type == "piper":
-            from dimos.hardware.manipulators.piper import PiperBackend
-
-            return PiperBackend(can_port=cfg.can_port or "can0", dof=cfg.dof)
-
-        else:
-            raise ValueError(f"Unknown backend type: {backend_type}")
+                return PiperBackend(can_port=cfg.can_port or "can0", dof=cfg.dof)
+            case _:
+                raise ValueError(f"Unknown backend type: {cfg.type}")
 
     def _create_task_from_config(self, cfg: TaskConfig) -> ControlTask:
         """Create a control task from config."""
@@ -410,7 +404,7 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                 logger.warning(f"Task {task_name} doesn't support execute()")
                 return False
 
-            t_now = time.perf_counter()
+            t_now: float = time.perf_counter()
             logger.info(
                 f"Executing trajectory on {task_name}: "
                 f"{len(trajectory.points)} points, duration={trajectory.duration:.3f}s"
@@ -428,12 +422,12 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
             result: dict[str, Any] = {"active": task.is_active()}
 
             if hasattr(task, "get_state"):
-                state = task.get_state()
+                state: TrajectoryState = task.get_state()  # type: ignore[attr-defined]
                 result["state"] = state.name if isinstance(state, TrajectoryState) else str(state)
 
             if hasattr(task, "get_progress"):
-                t_now = time.perf_counter()
-                result["progress"] = task.get_progress(t_now)
+                t_now: float = time.perf_counter()
+                result["progress"] = task.get_progress(t_now)  # type: ignore[attr-defined]
 
             return result
 
