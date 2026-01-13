@@ -16,7 +16,7 @@
 
 import logging
 import math
-from typing import Any, Optional
+from typing import Any
 
 from ..base.sdk_interface import BaseManipulatorSDK, ManipulatorInfo
 
@@ -41,50 +41,22 @@ class XArmSDKWrapper(BaseManipulatorSDK):
         """Connect to XArm controller.
 
         Args:
-            config: Configuration with:
-                - ip: IP address for hardware connection
-                - dof: Degrees of freedom (5, 6, or 7)
-                - connection_type: "hardware" or "sim"
-                - model_path: Path to MuJoCo model (for sim mode)
+            config: Configuration with 'ip' and optionally 'dof' (5, 6, or 7)
 
         Returns:
             True if connection successful
         """
         try:
-            connection_type = config.get("connection_type", "hardware")
-            if connection_type not in ["hardware", "sim"]:
-                raise ValueError(f"Invalid connection type: {connection_type}")
+            from xarm import XArmAPI
 
-            if connection_type == "hardware":
-                from xarm import XArmAPI
+            ip = config.get("ip", "192.168.1.100")
+            self.dof = config.get("dof", 7)
 
-                ip = config.get("ip", "192.168.1.100")
-                self.dof = config.get("dof", 7)
+            self.logger.info(f"Connecting to XArm at {ip} (DOF: {self.dof})...")
 
-                self.logger.info(f"Connecting to XArm at {ip} (DOF: {self.dof})...")
-
-                # Create XArm API instance
-                # XArm SDK uses degrees by default, we'll convert to radians
-                self.native_sdk = XArmAPI(ip, is_radian=False)
-
-            elif connection_type == "sim":
-                from dimos.simulation.manipulators.mujoco_sim.xarm_sim_bridge import (
-                    XArmSimBridge,
-                )
-
-                self.dof = config.get("dof", 7)
-                control_rate = config.get("control_rate", 100)
-                self.logger.info(f"Connecting to XArm Sim (DOF: {self.dof})...")
-                self.native_sdk = XArmSimBridge(
-                    is_radian=False,
-                    check_joint_limit=True,
-                    num_joints=self.dof,
-                    report_type="dev",
-                    joint_state_rate=float(control_rate),
-                    control_frequency=float(control_rate),
-                )
-                # XArmSimBridge needs explicit connect() call (unlike hardware XArmAPI)
-                self.native_sdk.connect()
+            # Create XArm API instance
+            # XArm SDK uses degrees by default, we'll convert to radians
+            self.native_sdk = XArmAPI(ip, is_radian=False)
 
             # Check connection
             if self.native_sdk.connected:
