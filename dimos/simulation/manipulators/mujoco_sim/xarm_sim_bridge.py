@@ -20,7 +20,6 @@ import time
 from typing import TYPE_CHECKING, Optional
 
 from dimos.simulation.manipulators.mujoco_sim import MujocoSimBridgeBase
-from dimos.simulation.manipulators.mujoco_sim.constants import VELOCITY_STOP_THRESHOLD
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
@@ -110,17 +109,12 @@ class XArmSimBridge(MujocoSimBridgeBase):
                 # Integrate velocity targets to position targets for MuJoCo control
                 dt = 1.0 / self._control_frequency
                 n_act = min(self._num_joints, self._model.nu)
-                n_q = min(self._num_joints, self._model.nq)
+                min(self._num_joints, self._model.nq)
                 with self._lock:
                     for i in range(n_act):
-                        if abs(vel_targets[i]) < VELOCITY_STOP_THRESHOLD:
-                            # When stopped, hold current position to prevent drift
-                            if i < n_q:
-                                self._velocity_control_positions[i] = self._hold_positions[i]
-                        else:
-                            # Integrate: position += velocity * dt
-                            self._velocity_control_positions[i] += vel_targets[i] * dt
-                            self._hold_positions[i] = self._velocity_control_positions[i]
+                        # Integrate: position += velocity * dt
+                        self._velocity_control_positions[i] += vel_targets[i] * dt
+                        self._hold_positions[i] = self._velocity_control_positions[i]
                         self._data.ctrl[i] = self._velocity_control_positions[i]
             else:
                 # Direct position control

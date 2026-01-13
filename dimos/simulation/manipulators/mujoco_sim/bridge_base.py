@@ -25,19 +25,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import threading
 import time
-from typing import TYPE_CHECKING
 
 import mujoco
 import mujoco.viewer as viewer
 from robot_descriptions.loaders.mujoco import load_robot_description
 
-from dimos.simulation.manipulators.mujoco_sim.constants import (
-    DEFAULT_CONTROL_FREQUENCY,
-    MIN_CONTROL_FREQUENCY,
-    POSITION_ZERO_THRESHOLD,
-    THREAD_JOIN_TIMEOUT,
-    VELOCITY_STOP_THRESHOLD,
-)
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -61,7 +53,7 @@ class MujocoSimBridgeBase(ABC):
         self,
         robot_name: str,
         num_joints: int,
-        control_frequency: float = DEFAULT_CONTROL_FREQUENCY,
+        control_frequency: float = 100.0,
         robot_description: str | None = None,
     ):
         """
@@ -75,11 +67,7 @@ class MujocoSimBridgeBase(ABC):
         """
         self._robot_name = robot_name
         self._num_joints = num_joints
-        self._control_frequency = (
-            control_frequency
-            if control_frequency > MIN_CONTROL_FREQUENCY
-            else DEFAULT_CONTROL_FREQUENCY
-        )
+        self._control_frequency = control_frequency
 
         # Load MuJoCo model
         self._model = load_robot_description(robot_description)
@@ -160,7 +148,7 @@ class MujocoSimBridgeBase(ABC):
 
         self._stop_event.set()
         if self._sim_thread and self._sim_thread.is_alive():
-            self._sim_thread.join(timeout=THREAD_JOIN_TIMEOUT)
+            self._sim_thread.join(timeout=2.0)
         self._sim_thread = None
 
     # ============= Simulation Loop =============
