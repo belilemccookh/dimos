@@ -22,13 +22,11 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 
-def extract_skills_from_container(
-    container: SkillContainer,
-) -> ToolSchemaList:
+def extract_skills_from_container(container: SkillContainer) -> ToolSchemaList:
     """Extract OpenAI-format tool schemas from a SkillContainer instance.
 
     Args:
-        container: A SkillContainer instance with skills defined.
+        container: A SkillContainer instance with defined skills.
 
     Returns:
         List of OpenAI-compatible tool definitions.
@@ -37,105 +35,57 @@ def extract_skills_from_container(
     skills_dict = container.skills()
 
     for skill_name, skill_config in skills_dict.items():
-        schema = skill_config.schema
-        if schema.get("type") == "function":
+        if (schema := skill_config.schema).get("type") == "function":
             tools.append(schema)
             logger.debug(f"Extracted skill: {skill_name}")
         else:
             logger.warning(f"Invalid schema format for skill: {skill_name}")
-
     return tools
 
 
-def extract_skills_from_container_class(
-    container_class: type[SkillContainer],
-) -> ToolSchemaList:
+def extract_skills_from_container_class(container_class: type[SkillContainer]) -> ToolSchemaList:
     """Extract OpenAI-format tool schemas from a SkillContainer class.
 
     Args:
-        container_class: A SkillContainer class (not instance).
+        container_class: A SkillContainer class (not an instance).
 
     Returns:
-        List of OpenAI-compatible tool definitions.
+        List of OpenAI-compatible tool definitions, empty list if instantiation fails.
     """
     try:
-        container = container_class()
-        return extract_skills_from_container(container)
+        return extract_skills_from_container(container_class())
     except Exception as e:
         logger.warning(f"Failed to instantiate {container_class.__name__}: {e}")
         return []
 
 
-def extract_skills_from_blueprint(
-    blueprint: ModuleBlueprintSet,
-) -> ToolSchemaList:
+def extract_skills_from_blueprint(blueprint: ModuleBlueprintSet) -> ToolSchemaList:
     """Extract all skill schemas from modules in a blueprint.
 
     Args:
         blueprint: A ModuleBlueprintSet containing module blueprints.
 
     Returns:
-        List of OpenAI-compatible tool definitions from all skill containers.
+        List of unique OpenAI-compatible tool definitions from all skill containers.
     """
     all_tools: ToolSchemaList = []
     seen_skills: set[str] = set()
 
     for module_blueprint in blueprint.blueprints:
-        module_class = module_blueprint.module
-
-        # Check if this module is a SkillContainer
-        if not issubclass(module_class, SkillContainer):
+        if not issubclass(module_blueprint.module, SkillContainer):
             continue
-
-        logger.info(f"Extracting skills from: {module_class.__name__}")
-
         try:
-            # Instantiate the module with its blueprint args/kwargs
-            instance = module_class(*module_blueprint.args, **module_blueprint.kwargs)
-            tools = extract_skills_from_container(instance)
-
-            # Deduplicate by skill name
-            for tool in tools:
+            for tool in extract_skills_from_container(
+                module_blueprint.module(*module_blueprint.args, **module_blueprint.kwargs)
+            ):
                 skill_name = tool.get("function", {}).get("name", "")
                 if skill_name and skill_name not in seen_skills:
                     all_tools.append(tool)
                     seen_skills.add(skill_name)
                 elif skill_name in seen_skills:
                     logger.debug(f"Skipping duplicate skill: {skill_name}")
-
         except Exception as e:
-            logger.warning(f"Failed to extract skills from {module_class.__name__}: {e}")
+            logger.warning(f"Failed to extract skills from {module_blueprint.module.__name__}: {e}")
             continue
-
     logger.info(f"Extracted {len(all_tools)} unique skills from blueprint")
     return all_tools
-
-
-def get_skill_summary(tools: ToolSchemaList) -> str:
-    """Generate a human-readable summary of extracted skills.
-
-    Args:
-        tools: List of OpenAI-format tool definitions.
-
-    Returns:
-        Formatted string summary of all skills.
-    """
-    lines = [f"Extracted {len(tools)} skills:", "=" * 60]
-
-    for tool in tools:
-        func = tool.get("function", {})
-        name = func.get("name", "unknown")
-        desc = func.get("description", "No description").split("\n")[0][:60]
-        params = func.get("parameters", {}).get("properties", {})
-        required = func.get("parameters", {}).get("required", [])
-
-        lines.append(f"\n{name}")
-        if desc:
-            lines.append(f"  Description: {desc}...")
-        lines.append("  Parameters:")
-        for param_name, param_schema in params.items():
-            req = " (required)" if param_name in required else " (optional)"
-            param_type = param_schema.get("type", "unknown")
-            lines.append(f"    - {param_name}: {param_type}{req}")
-
-    return "\n".join(lines)
