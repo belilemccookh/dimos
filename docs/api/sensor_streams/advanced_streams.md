@@ -122,14 +122,34 @@ class MLModel(Module):
 
 ```
 
-
-
-
-
-
 ## Getting Values Synchronously
 
-Sometimes you don't want a stream, you just want to call a function and get the latest value. We provide two approaches:
+Sometimes you don't want a stream, you just want to call a function and get the latest value.
+
+If you are doing this periodically as a part of a processing loop, it is very likely that your code will be much cleaner and safer using actual reactivex pipeline. So bias towards checking our [reactivex quick guide](reactivex.md) and [official docs](https://rxpy.readthedocs.io/)
+
+(TODO we should actually make this example actually executable)
+
+```python skip
+    self.color_image.observable().pipe(
+        # takes the best image from a stream every 200ms,
+        # ensuring we are feeding our detector with highest quality frames
+        quality_barrier(lambda x: x["quality"], target_frequency=0.2),
+
+        # converts Image into Person detections
+        ops.map(detect_person)
+
+        # converts Detection2D to Twist pointing in the direction of a detection
+        ops.map(detection2d_to_twist)
+
+        # emits the latest value every 50ms making our control loop run at 20hz
+        # despire detections running at 200ms
+        ops.sample(0.05),
+    ).subscribe(self.twist.publish) # shoots off the Twist out of the module
+```
+
+
+If you'd still like to switch to synchronious fetching from streams, we provide two approaches, getter_hot and getter_cold:
 
 |                  | `getter_hot()`                 | `getter_cold()`                  |
 |------------------|--------------------------------|----------------------------------|
