@@ -74,11 +74,11 @@ format json..............................................................Passed
 LFS data.................................................................Passed
 
 ```
-Given your editor uses ruff via devcontainers (which it should) actual auto-commit hook won't ever reformat your code - IDE will have already done this.
+Given your editor uses ruff via devcontainers (which it should), the auto-commit hook won't ever reformat your code - IDE will have already done this.
 
 ### Running hooks manually
 
-Given your editor uses git via devcontainers (which it should) auto-commit hooks will run automatically, this is in case you want to run them manually.
+Given your editor uses git via devcontainers (which it should), auto-commit hooks will run automatically. This is in case you want to run them manually.
 
 Inside the dev container (Your IDE will likely run this transparently for each commit if using devcontainer plugin):
 

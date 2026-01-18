@@ -60,7 +60,7 @@ We can see that camera module outputs two streams:
 
 Offers two RPC calls, `start()` and `stop()`
 
-As well as an agentic [Skill][skills.md] called `video_stream` (more about this later, in [Skills Tutorial][skills.md])
+As well as an agentic [Skill](skills.md) called `video_stream` (more about this later, in [Skills Tutorial](skills.md))
 
 We can start this module and explore the output of its streams in real time (this will use your webcam).
 
@@ -124,7 +124,7 @@ TODO: add easy way to print config
 
 looks like detector just needs an image input, outputs some sort of detection and annotation messages, let's connect it to a camera.
 
-```pythonx ansi=false
+```python ansi=false
 import time
 from dimos.perception.detection.module2D import Detection2DModule, Config
 from dimos.hardware.sensors.camera.module import CameraModule

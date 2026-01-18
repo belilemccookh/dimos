@@ -2,13 +2,13 @@
 
 1. [How to setup your system](#1-setup) (pick one: system install, nix flake + direnv, pure nix flake)
 2. [How to hack on DimOS](#2-how-to-hack-on-dimos) (which files to edit, debugging help, etc)
-4. [How to make a PR](#3-how-to-make-a-pr) (our expectations for a PR)
+3. [How to make a PR](#3-how-to-make-a-pr) (our expectations for a PR)
 
 <br>
 
 # 1. Setup
 
-All the setup options are for your convenience. If you can get DimOS running on temple OS with a package manager you wrote yourself, all the power to you.
+All the setup options are for your convenience. If you can get DimOS running on TempleOS with a package manager you wrote yourself, all the power to you.
 
 ---
 
