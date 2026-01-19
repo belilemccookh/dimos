@@ -97,7 +97,6 @@ class OnnxController(ABC):
             outputs=self._output_names,
         )
 
-
         self._action_scale = action_scale
         self._default_angles = default_angles
         self._last_action = np.zeros_like(default_angles, dtype=np.float32)
