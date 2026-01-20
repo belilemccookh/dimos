@@ -246,19 +246,37 @@ class RawROS(PubSub[RawROSTopic, Any]):
             return unsubscribe
 
 
-class DimosROS(RawROS):
+class DimosROS(PubSub[ROSTopic, DimosMsg]):
     """ROS PubSub with automatic dimos.msgs ↔ ROS message conversion.
 
     Uses ROSTopic (with dimos msg_type) instead of RawROSTopic (with ros_type).
     Automatically converts between dimos and ROS message formats.
+    Uses composition with RawROS internally.
     """
+
+    def __init__(self, node_name: str | None = None, qos: "QoSProfile | None" = None) -> None:
+        """Initialize the DimosROS pubsub.
+
+        Args:
+            node_name: Name for the ROS node (auto-generated if None)
+            qos: Optional QoS profile (defaults to BEST_EFFORT for throughput)
+        """
+        self._raw = RawROS(node_name, qos)
+
+    def start(self) -> None:
+        """Start the ROS node and executor."""
+        self._raw.start()
+
+    def stop(self) -> None:
+        """Stop the ROS node and clean up."""
+        self._raw.stop()
 
     def _to_raw_topic(self, topic: ROSTopic) -> RawROSTopic:
         """Convert a ROSTopic to a RawROSTopic by deriving the ROS type."""
         ros_type = derive_ros_type(topic.msg_type)
         return RawROSTopic(topic=topic.topic, ros_type=ros_type, qos=topic.qos)
 
-    def publish(self, topic: ROSTopic, message: DimosMsg) -> None:  # type: ignore[override]
+    def publish(self, topic: ROSTopic, message: DimosMsg) -> None:
         """Publish a dimos message to a ROS topic.
 
         Args:
@@ -267,11 +285,11 @@ class DimosROS(RawROS):
         """
         raw_topic = self._to_raw_topic(topic)
         ros_message = dimos_to_ros(message, raw_topic.ros_type)
-        super().publish(raw_topic, ros_message)
+        self._raw.publish(raw_topic, ros_message)
 
     def subscribe(
         self, topic: ROSTopic, callback: Callable[[DimosMsg, ROSTopic], None]
-    ) -> Callable[[], None]:  # type: ignore[override]
+    ) -> Callable[[], None]:
         """Subscribe to a ROS topic with automatic dimos message conversion.
 
         Args:
@@ -287,7 +305,7 @@ class DimosROS(RawROS):
             dimos_msg = ros_to_dimos(ros_msg, topic.msg_type)
             callback(dimos_msg, topic)
 
-        return super().subscribe(raw_topic, wrapped_callback)
+        return self._raw.subscribe(raw_topic, wrapped_callback)
 
 
 ROS = DimosROS
