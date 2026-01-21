@@ -40,23 +40,26 @@ logger = setup_logger()
 class ArucoTrackerConfig(ModuleConfig):
     """Configuration for ArUco tracker."""
 
+    # ArUco detection
     marker_size: float = 0.1
     aruco_dict: int = cv2.aruco.DICT_4X4_50
-    camera_frame_id: str = "camera_color_optical_frame"  # Frame ID for the camera
-    rate: float = 1  # Rate in Hz - defines speed of execution (process loop then sleep)
-    max_loops: int = 5  # Maximum number of loops to process
-    move_robot_to_aruco: bool = True  # Whether to move the robot to the ArUco marker
-    move_robot_to_aruco_rotation: bool = (
-        False  # Whether to follow ArUco rotation (False = fixed orientation)
-    )
-    safety_max_joint_delta_deg: float = 15.0  # Max allowed joint angle change (degrees) per command
-    expected_marker_count: int = 4  # Expected number of ArUco markers
+    expected_marker_count: int = 4
 
-    # IK config
-    mjcf_path: str = ""  # Path to MJCF file for IK solver (required)
-    ee_joint_id: int = 6  # End-effector joint ID in the kinematic chain
-    task_name: str = "traj_arm"  # Task name for OrchestratorClient trajectory execution
-    min_move_distance_m: float = 0.003  # Minimum EE movement (meters) to trigger trajectory
+    # Processing
+    camera_frame_id: str = "camera_color_optical_frame"
+    rate: float = 1
+    max_loops: int = 5
+
+    # Robot control
+    move_robot_to_aruco: bool = True
+    move_robot_to_aruco_rotation: bool = False
+    safety_max_joint_delta_deg: float = 15.0
+
+    # IK
+    mjcf_path: str = ""
+    ee_joint_id: int = 6
+    task_name: str = "traj_arm"
+    min_move_distance_m: float = 0.003
 
 
 class ArucoTracker(Module[ArucoTrackerConfig]):
@@ -87,18 +90,19 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         self._aruco_params = cv2.aruco.DetectorParameters()
         self._detector = cv2.aruco.ArucoDetector(self._aruco_dict, self._aruco_params)
 
-        # params from callback
+        # Camera state
         self._camera_matrix: np.ndarray | None = None
         self._dist_coeffs: np.ndarray | None = None
         self._latest_image: Image | None = None
 
+        # Processing thread
         self._stop_event = Event()
         self._processing_thread: Thread | None = None
         self._loop_count = 0
 
+        # IK and control
         self._orchestrator_client = OrchestratorClient()
         self._last_q: np.ndarray | None = None
-
         if not self.config.mjcf_path:
             raise ValueError("mjcf_path must be set for IK solver")
         self._ik_solver = PinocchioIK(
@@ -106,6 +110,10 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             ee_joint_id=self.config.ee_joint_id,
         )
         logger.info(f"IK solver initialized with MJCF: {self.config.mjcf_path}")
+
+    # =========================================================================
+    # Lifecycle
+    # =========================================================================
 
     @rpc
     def start(self) -> None:
@@ -138,6 +146,10 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         self._orchestrator_client.stop()
         super().stop()
 
+    # =========================================================================
+    # Callbacks
+    # =========================================================================
+
     def _store_latest_image(self, image: Image) -> None:
         """Store the latest image for processing."""
         self._latest_image = image
@@ -156,26 +168,9 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         if joint_state.position:
             self._last_q = np.array(joint_state.position)
 
-    def _log_transform_to_rerun(self, transform: Transform) -> None:
-        """Log a transform to Rerun."""
-        rr.log(f"world/tf/{transform.child_frame_id}", transform.to_rerun())
-
-    def _check_joint_safety(self, q_solution: np.ndarray) -> bool:
-        """Check if joint movement is within safety limits"""
-        q_new = q_solution.flatten()
-        q_old = self._last_q.flatten()
-        joint_deltas_deg = np.abs(np.degrees(q_new - q_old))
-        max_delta_deg = np.max(joint_deltas_deg)
-        logger.debug(f"IK solution (deg): {[f'{np.degrees(angle):.1f}' for angle in q_new]}")
-
-        if max_delta_deg > self.config.safety_max_joint_delta_deg:
-            max_joint_idx = np.argmax(joint_deltas_deg)
-            logger.error(
-                f"Safety check failed: joint {max_joint_idx + 1} delta {max_delta_deg:.1f}° "
-                f"exceeds limit {self.config.safety_max_joint_delta_deg:.1f}°"
-            )
-            return False
-        return True
+    # =========================================================================
+    # Processing loop
+    # =========================================================================
 
     def _processing_loop(self) -> None:
         """Processing loop that runs at the configured rate."""
@@ -188,7 +183,7 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
                 if self._latest_image is None:
                     time.sleep(period)
                     continue
-                self._process_image(self._latest_image)
+                self._update_tracking(self._latest_image)
                 self._loop_count += 1
                 logger.debug(f"Processed image {self._loop_count}/{self.config.max_loops}")
             except Exception as e:
@@ -200,8 +195,8 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
                 time.sleep(sleep_time)
         logger.info(f"ArUco processing loop completed after {self._loop_count} iterations")
 
-    def _process_image(self, image: Image) -> None:
-        """Process image to detect ArUco markers and average their poses."""
+    def _update_tracking(self, image: Image) -> None:
+        """Detect ArUco markers and update tracking with computed poses."""
         if self._camera_matrix is None or self._dist_coeffs is None:
             return  # Skip if camera info not ready yet
 
@@ -259,6 +254,43 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             image.format.name,
         )
 
+    # =========================================================================
+    # Pose computation and IK
+    # =========================================================================
+
+    def _check_joint_safety(self, q_solution: np.ndarray) -> bool:
+        """Check if joint movement is within safety limits."""
+        q_new = q_solution.flatten()
+        q_old = self._last_q.flatten()
+        joint_deltas_deg = np.abs(np.degrees(q_new - q_old))
+        max_delta_deg = np.max(joint_deltas_deg)
+        logger.debug(f"IK solution (deg): {[f'{np.degrees(angle):.1f}' for angle in q_new]}")
+
+        if max_delta_deg > self.config.safety_max_joint_delta_deg:
+            max_joint_idx = np.argmax(joint_deltas_deg)
+            logger.error(
+                f"Safety check failed: joint {max_joint_idx + 1} delta {max_delta_deg:.1f}° "
+                f"exceeds limit {self.config.safety_max_joint_delta_deg:.1f}°"
+            )
+            return False
+        return True
+
+    def _average_marker_poses(
+        self, rvecs: np.ndarray, tvecs: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Average multiple marker poses into a single pose."""
+        rotations = []
+        positions = []
+        for i in range(len(rvecs)):
+            rot_matrix, _ = cv2.Rodrigues(rvecs[i][0])
+            rotations.append(Rotation.from_matrix(rot_matrix))
+            positions.append(tvecs[i][0])
+
+        avg_position = np.mean(positions, axis=0)
+        avg_rotation = Rotation.concatenate(rotations).mean()
+        avg_quat = avg_rotation.as_quat()  # [x, y, z, w]
+        return avg_position, avg_quat
+
     def _compute_reach_pose(self, aruco_wrt_robot_base: Transform) -> Pose | None:
         """Compute the reach pose from ArUco marker position with offset."""
         if not self.config.move_robot_to_aruco:
@@ -281,22 +313,6 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         pose = Pose(position=position, orientation=orientation)
         logger.debug(f"Reach pose: {pose}")
         return pose
-
-    def _average_marker_poses(
-        self, rvecs: np.ndarray, tvecs: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Average multiple marker poses into a single pose."""
-        rotations = []
-        positions = []
-        for i in range(len(rvecs)):
-            rot_matrix, _ = cv2.Rodrigues(rvecs[i][0])
-            rotations.append(Rotation.from_matrix(rot_matrix))
-            positions.append(tvecs[i][0])
-
-        avg_position = np.mean(positions, axis=0)
-        avg_rotation = Rotation.concatenate(rotations).mean()
-        avg_quat = avg_rotation.as_quat()  # [x, y, z, w]
-        return avg_position, avg_quat
 
     def _send_joint_command(self, goal_pose: Pose) -> None:
         """Compute IK and send joint positions via OrchestratorClient trajectory."""
@@ -331,6 +347,14 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             logger.debug(f"Sent trajectory to {[f'{p:.3f}' for p in joint_positions]}")
         else:
             logger.warning("Failed to send trajectory via OrchestratorClient")
+
+    # =========================================================================
+    # Transform publishing
+    # =========================================================================
+
+    def _log_transform_to_rerun(self, transform: Transform) -> None:
+        """Log a transform to Rerun."""
+        rr.log(f"world/tf/{transform.child_frame_id}", transform.to_rerun())
 
     def _set_transforms(
         self, marker_id: int | str, tvec: np.ndarray, quat: np.ndarray, timestamp: float
@@ -370,6 +394,10 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             self.tf.publish(ee_transform)
             self._log_transform_to_rerun(ee_transform)
         return aruco_transform
+
+    # =========================================================================
+    # Image annotation and publishing
+    # =========================================================================
 
     def _publish_annotated_image(self, display_image: np.ndarray, image_format: str) -> None:
         """Publish the annotated image to subscribers and Rerun."""

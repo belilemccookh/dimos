@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Pinocchio-based inverse kinematics solver."""
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -23,6 +25,11 @@ if TYPE_CHECKING:
 
 
 class PinocchioIK:
+    """Inverse kinematics solver using Pinocchio.
+
+    Uses damped least-squares (Levenberg-Marquardt) method for IK solving.
+    """
+
     def __init__(
         self,
         mjcf_path: str,
@@ -31,25 +38,47 @@ class PinocchioIK:
         max_iter: int = 1000,
         dt: float = 1e-1,
         damp: float = 1e-12,
-    ):
+    ) -> None:
+        # Model
         self.model = pinocchio.buildModelFromMJCF(mjcf_path)
         self.data = self.model.createData()
         self.ee_joint_id = ee_joint_id
+
+        # Solver parameters
         self.eps = eps
         self.max_iter = max_iter
         self.dt = dt
         self.damp = damp
 
+    # =========================================================================
+    # Forward kinematics
+    # =========================================================================
+
     def forward_kinematics(self, q: np.ndarray) -> pinocchio.SE3:
+        """Compute end-effector pose from joint angles."""
         pinocchio.forwardKinematics(self.model, self.data, q)
         return self.data.oMi[self.ee_joint_id]
+
+    # =========================================================================
+    # Inverse kinematics
+    # =========================================================================
 
     def solve_ik(
         self,
         target_pose: pinocchio.SE3,
         q_init: np.ndarray | None = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray | None, bool]:
+    ) -> tuple[np.ndarray, bool]:
+        """Solve IK for a target SE3 pose.
+
+        Args:
+            target_pose: Target end-effector pose as SE3
+            q_init: Initial joint configuration (uses neutral if None)
+            verbose: Print convergence info
+
+        Returns:
+            Tuple of (joint_angles, converged)
+        """
         if q_init is None:
             q = pinocchio.neutral(self.model)
         else:
@@ -83,26 +112,31 @@ class PinocchioIK:
         rpy_degrees: tuple[float, float, float],
         q_init: np.ndarray | None = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray | None, bool]:
+    ) -> tuple[np.ndarray, bool]:
+        """Solve IK for position and RPY orientation (in degrees)."""
         roll, pitch, yaw = np.radians(rpy_degrees)
         rotation = pinocchio.rpy.rpyToMatrix(roll, pitch, yaw)
         target_pose = pinocchio.SE3(rotation, position)
         return self.solve_ik(target_pose, q_init, verbose)
 
-    def pose_to_se3(self, pose: "Pose") -> pinocchio.SE3:
-        """Convert a Pose to pinocchio SE3."""
-        position = np.array([pose.x, pose.y, pose.z])
-        rotation = pinocchio.rpy.rpyToMatrix(pose.roll, pose.pitch, pose.yaw)
-        return pinocchio.SE3(rotation, position)
-
     def solve_ik_from_pose(
         self,
         goal_pose: "Pose",
         q_current: np.ndarray,
-    ) -> tuple[np.ndarray | None, bool]:
+    ) -> tuple[np.ndarray, bool]:
         """Solve IK for a goal Pose, using current joint state as warm-start."""
-        target_se3 = self.pose_to_se3(goal_pose)
+        target_se3 = self._pose_to_se3(goal_pose)
         return self.solve_ik(target_se3, q_init=q_current)
+
+    # =========================================================================
+    # Conversions
+    # =========================================================================
+
+    def _pose_to_se3(self, pose: "Pose") -> pinocchio.SE3:
+        """Convert a Pose message to pinocchio SE3."""
+        position = np.array([pose.x, pose.y, pose.z])
+        rotation = pinocchio.rpy.rpyToMatrix(pose.roll, pose.pitch, pose.yaw)
+        return pinocchio.SE3(rotation, position)
 
 
 if __name__ == "__main__":
