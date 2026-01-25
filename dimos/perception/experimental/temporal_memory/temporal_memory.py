@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import threading
 import time
 from typing import Any
@@ -563,8 +564,6 @@ class TemporalMemory(SkillModule):
             answer_text = answer_text.strip()
 
             # Check for rename commands in the response
-            import re
-
             rename_pattern = r'RENAME_ENTITY:\s*entity_id="([^"]+)"\s+new_name="([^"]+)"'
             matches = re.findall(rename_pattern, answer_text)
 

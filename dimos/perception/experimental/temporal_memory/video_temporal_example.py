@@ -25,6 +25,7 @@ This example demonstrates how to:
 from pathlib import Path
 import sys
 import threading
+import time
 
 import cv2
 from dotenv import load_dotenv
@@ -142,7 +143,6 @@ def example_usage() -> None:
         print(f"Artifacts will be saved to: {output_dir}")
 
         # Calculate video duration and wait for full video to process
-        import time
 
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
