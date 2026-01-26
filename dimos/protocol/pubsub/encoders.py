@@ -18,7 +18,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import pickle
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+
+from dimos.msgs import DimosMsg
+from dimos.msgs.sensor_msgs import Image
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,6 +35,7 @@ class PubSubEncoderMixin(Generic[TopicT, MsgT, EncodingT], ABC):
     """Mixin that encodes messages before publishing and decodes them after receiving.
 
     This will override publish and subscribe methods to add encoding/decoding.
+    Must be mixed with a class implementing PubSubProtocol[TopicT, EncodingT].
 
     Usage: Just specify encoder and decoder as a subclass:
 
@@ -42,20 +46,19 @@ class PubSubEncoderMixin(Generic[TopicT, MsgT, EncodingT], ABC):
             data: json.loads(data.decode('utf-8'))
     """
 
+    # Declare expected methods from PubSubProtocol for type checking
+    if TYPE_CHECKING:
+        _base_publish: Callable[[TopicT, EncodingT], None]
+        _base_subscribe: Callable[[TopicT, Callable[[EncodingT, TopicT], None]], Callable[[], None]]
+
     @abstractmethod
     def encode(self, msg: MsgT, topic: TopicT) -> EncodingT: ...
 
     @abstractmethod
     def decode(self, msg: EncodingT, topic: TopicT) -> MsgT: ...
 
-    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        super().__init__(*args, **kwargs)
-        self._encode_callback_map: dict = {}  # type: ignore[type-arg]
-
     def publish(self, topic: TopicT, message: MsgT) -> None:
         """Encode the message and publish it."""
-        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():  # type: ignore[attr-defined]
-            return
         encoded_message = self.encode(message, topic)
         if encoded_message is None:
             return
@@ -70,57 +73,40 @@ class PubSubEncoderMixin(Generic[TopicT, MsgT, EncodingT], ABC):
             decoded_message = self.decode(encoded_data, topic)
             callback(decoded_message, topic)
 
-        return super().subscribe(topic, wrapper_cb)  # type: ignore[misc, no-any-return]
+        return cast("Callable[[], None]", super().subscribe(topic, wrapper_cb))  # type: ignore[misc]
 
 
 class PickleEncoderMixin(PubSubEncoderMixin[TopicT, MsgT, bytes]):
-    """Encoder mixin that uses pickle for serialization."""
+    """Encoder mixin that uses pickle for serialization. Works with any Python object."""
 
-    def encode(self, msg: MsgT, *_: TopicT) -> bytes:  # type: ignore[return]
-        try:
-            return pickle.dumps(msg)
-        except Exception as e:
-            print("Pickle encoding error:", e)
-            import traceback
-
-            traceback.print_exc()
-            print("Tried to pickle:", msg)
+    def encode(self, msg: MsgT, _: TopicT) -> bytes:
+        return pickle.dumps(msg)
 
     def decode(self, msg: bytes, _: TopicT) -> MsgT:
-        return pickle.loads(msg)  # type: ignore[no-any-return]
+        return cast("MsgT", pickle.loads(msg))
 
 
-from typing import Any, Protocol
-
-
-class TypedTopic(Protocol):
-    """Protocol for topics that carry type information for decoding."""
-
-    @property
-    def lcm_type(self) -> type | None: ...
-
-
-class LCMEncoderMixin(PubSubEncoderMixin[TopicT, Any, bytes]):
+class LCMEncoderMixin(PubSubEncoderMixin[TopicT, DimosMsg, bytes]):
     """Encoder mixin for DimosMsg using LCM binary encoding."""
 
-    def encode(self, msg: Any, _: TopicT) -> bytes:
-        return msg.lcm_encode()  # type: ignore[no-any-return]
+    def encode(self, msg: DimosMsg, _: TopicT) -> bytes:
+        return msg.lcm_encode()
 
-    def decode(self, msg: bytes, topic: TopicT) -> Any:
+    def decode(self, msg: bytes, topic: TopicT) -> DimosMsg:
         lcm_type = getattr(topic, "lcm_type", None)
         if lcm_type is None:
             raise ValueError("Cannot decode: topic has no lcm_type")
-        return lcm_type.lcm_decode(msg)
+        return cast("DimosMsg", lcm_type.lcm_decode(msg))
 
 
-class JpegEncoderMixin(PubSubEncoderMixin[TopicT, Any, bytes]):
+class JpegEncoderMixin(PubSubEncoderMixin[TopicT, Image, bytes]):
     """Encoder mixin for DimosMsg using JPEG encoding (for images)."""
 
-    def encode(self, msg: Any, _: TopicT) -> bytes:
-        return msg.lcm_jpeg_encode()  # type: ignore[no-any-return]
+    def encode(self, msg: Image, _: TopicT) -> bytes:
+        return msg.lcm_jpeg_encode()
 
-    def decode(self, msg: bytes, topic: TopicT) -> Any:
+    def decode(self, msg: bytes, topic: TopicT) -> Image:
         lcm_type = getattr(topic, "lcm_type", None)
         if lcm_type is None:
             raise ValueError("Cannot decode: topic has no lcm_type")
-        return lcm_type.lcm_jpeg_decode(msg)
+        return cast("Image", lcm_type.lcm_jpeg_decode(msg))
