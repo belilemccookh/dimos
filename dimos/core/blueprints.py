@@ -371,6 +371,8 @@ class Blueprint:
                 module_ref_name,
                 target_module_proxy,
             )
+            # Ensure the remote module instance can use the module ref inside its own RPC handlers.
+            base_module_proxy.set_module_ref(module_ref_name, target_module_proxy)
 
     def _connect_rpc_methods(self, module_coordinator: ModuleCoordinator) -> None:
         # Gather all RPC methods.

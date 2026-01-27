@@ -339,6 +339,10 @@ class ModuleBase(Configurable[ModuleConfigT], SkillContainer, Resource):
         callable.set_rpc(self.rpc)  # type: ignore[arg-type]
         self._bound_rpc_calls[method] = callable
 
+    @rpc
+    def set_module_ref(self, name: str, module_ref: Any) -> None:
+        setattr(self, name, module_ref)
+
     @overload
     def get_rpc_calls(self, method: str) -> RpcCall: ...
 
