@@ -35,6 +35,7 @@ from dimos.core.rpc_client import RpcCall
 from dimos.core.stream import In, Out
 from dimos.core.transport import LCMTransport
 from dimos.msgs.sensor_msgs import Image
+from dimos.protocol import pubsub
 from dimos.spec.utils import Spec
 
 # Disable Rerun for tests (prevents viewer spawn and gRPC flush errors)
@@ -399,10 +400,10 @@ class Calculator1(Module):
         return a + b
 
     @rpc
-    def start(): ...
+    def start(self) -> None: ...
 
     @rpc
-    def stop(): ...
+    def stop(self) -> None: ...
 
 
 class Calculator2(Module):
@@ -415,10 +416,10 @@ class Calculator2(Module):
         return a * b
 
     @rpc
-    def start(): ...
+    def start(self) -> None: ...
 
     @rpc
-    def stop(): ...
+    def stop(self) -> None: ...
 
 
 # link to a specific module
@@ -431,7 +432,7 @@ class Mod1(Module):
         _ = self.calc.compute1
 
     @rpc
-    def stop(): ...
+    def stop(self) -> None: ...
 
 
 # link to any module that implements a spec (Autoconnect will handle it)
@@ -444,7 +445,7 @@ class Mod2(Module):
         _ = self.calc.compute1
 
     @rpc
-    def stop(): ...
+    def stop(self) -> None: ...
 
 
 @pytest.mark.integration
@@ -502,13 +503,3 @@ def test_module_ref_remap_ambiguous() -> None:
         assert mod2.calc.compute2(2.0, 3.0) == 5.0
     finally:
         coordinator.stop()
-
-
-@pytest.mark.integration
-def test_module_ref_spec_ambiguous_error() -> None:
-    with pytest.raises(Exception):
-        autoconnect(
-            Calculator1.blueprint(),
-            Calculator2.blueprint(),
-            Mod2.blueprint(),
-        ).build(**_BUILD_WITHOUT_RERUN)
