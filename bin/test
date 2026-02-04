@@ -16,6 +16,7 @@ Options:
   --without <list>  Comma-separated markers to disable (applied after --all)
   --only-failed     Run only tests that failed in the last cache
   --timeout-ms <n>  Kill a test process after n milliseconds (wall time)
+  --refresh-test-list  Rebuild cached test list
 
 Markers can be provided as comma-separated values or repeated args.`)
 }
@@ -41,6 +42,7 @@ function parseArgs(args) {
   let enableAll = false
   let onlyFailed = false
   let timeoutMs = null
+  let refreshTestList = false
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
     if (arg === "--help" || arg === "-h") {
@@ -53,6 +55,10 @@ function parseArgs(args) {
     }
     if (arg === "--only-failed") {
       onlyFailed = true
+      continue
+    }
+    if (arg === "--refresh-test-list") {
+      refreshTestList = true
       continue
     }
     if (arg === "--timeout-ms") {
@@ -102,6 +108,7 @@ function parseArgs(args) {
     enableAll,
     onlyFailed,
     timeoutMs,
+    refreshTestList,
   }
 }
 
@@ -165,7 +172,7 @@ collector = Collector()
 
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-    ret = pytest.main([\"--collect-only\", \"-q\", \"--disable-warnings\", \"--continue-on-collection-errors\", \"-p\", \"no:warnings\"], plugins=[collector])
+    ret = pytest.main([\"--collect-only\", \"-q\", \"--disable-warnings\", \"--continue-on-collection-errors\", \"-p\", \"no:warnings\", \"-o\", \"addopts=\"], plugins=[collector])
 
 print(json.dumps({\"items\": collector.items, \"retcode\": ret, \"output\": buf.getvalue()}))
 `
@@ -242,7 +249,9 @@ for (const marker of availableMarkers) {
   console.log(`- ${marker}`)
 }
 
-const { markers: requestedMarkers, without: withoutMarkers, enableAll, onlyFailed, timeoutMs } = parseArgs(Deno.args)
+const { markers: requestedMarkers, without: withoutMarkers, enableAll, onlyFailed, timeoutMs, refreshTestList } = parseArgs(
+  Deno.args,
+)
 const timeoutCmd = await findTimeoutCommand()
 if (timeoutMs && !timeoutCmd) {
   console.error("Warning: --timeout-ms provided but no timeout/gtimeout command found; running without a timeout.")
@@ -263,23 +272,32 @@ if (onlyFailed) {
 }
 console.log("")
 
-console.log("Getting all test names (takes a second to scan the entire project)")
-const collection = await collectTests(pythonCmd)
-if (collection.retcode !== 0) {
-  if (collection.output && collection.output.trim().length > 0) {
-    const trimmed = collection.output.trim()
-    const maxChars = 8000
-    const sliced = trimmed.length > maxChars ? trimmed.slice(trimmed.length - maxChars) : trimmed
-    console.error(sliced)
+const cache = await loadCache(cachePath)
+
+let items = cache.test_list
+if (!items || refreshTestList) {
+  console.log("Getting all test names (takes a second to scan the entire project)")
+  const collection = await collectTests(pythonCmd)
+  if (collection.retcode !== 0) {
+    if (collection.output && collection.output.trim().length > 0) {
+      const trimmed = collection.output.trim()
+      const maxChars = 8000
+      const sliced = trimmed.length > maxChars ? trimmed.slice(trimmed.length - maxChars) : trimmed
+      console.error(sliced)
+    }
+    if (!collection.items || collection.items.length === 0) {
+      console.error("Test collection failed.")
+      Deno.exit(collection.retcode)
+    }
+    console.error("Test collection had errors; continuing with collected tests.")
   }
-  if (!collection.items || collection.items.length === 0) {
-    console.error("Test collection failed.")
-    Deno.exit(collection.retcode)
-  }
-  console.error("Test collection had errors; continuing with collected tests.")
+  items = collection.items || []
+  cache.test_list = items
+  await saveCache(cachePath, cache)
+} else {
+  console.log("Using cached test list, use --refresh-test-list if new tests have been added.")
 }
 
-const items = collection.items || []
 console.log("")
 console.log(`Collected ${items.length} tests:`)
 for (const item of items) {
@@ -298,8 +316,6 @@ for (const item of items) {
 
 console.log("")
 console.log(`Selected ${selectedTests.length} tests.`)
-
-const cache = await loadCache(cachePath)
 
 let filteredTests = selectedTests
 if (onlyFailed) {
@@ -359,11 +375,10 @@ for (const test of runQueue) {
 }
 
 const failures = Object.entries(cache.tests).filter(([, entry]) => entry.status === "fail").length
+console.log("")
 if (failures > 0) {
-  console.log("")
   console.log(`Completed with ${failures} failing test(s). ${red("✗")}`)
   Deno.exit(1)
 } else {
-    console.log(`Completed with 0 failing tests! ${green("✓")}`)
-
+  console.log(`Completed with 0 failing tests! ${green("✓")}`)
 }
