@@ -85,14 +85,13 @@ logger = setup_logger()
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from types import ModuleType
 
     from rerun._baseclasses import Archetype
     from rerun.blueprint import Blueprint
 
     from dimos.protocol.pubsub.spec import SubscribeAllCapable
 
-BlueprintFactory: TypeAlias = "Callable[[ModuleType], Blueprint]"
+BlueprintFactory: TypeAlias = "Callable[[], Blueprint]"
 
 # to_rerun() can return a single archetype or a list of (entity_path, archetype) tuples
 RerunMulti: TypeAlias = "list[tuple[str, Archetype]]"
@@ -123,11 +122,12 @@ class RerunConvertible(Protocol):
 ViewerMode = Literal["native", "web", "none"]
 
 
-def _default_blueprint(rrb: ModuleType) -> Blueprint:
+def _default_blueprint() -> Blueprint:
     """Default blueprint with black background and raised grid."""
     import rerun as rr
+    import rerun.blueprint as rrb
 
-    return rrb.Blueprint(
+    return rrb.Blueprint(  # type: ignore[no-any-return]
         rrb.Spatial3DView(
             origin="world",
             background=rrb.Background(kind="SolidColor", color=[0, 0, 0]),
@@ -262,9 +262,7 @@ class RerunBridgeModule(Module):
         # "none" - just init, no viewer (connect externally)
 
         if self.config.blueprint:
-            import rerun.blueprint as rrb
-
-            rr.send_blueprint(self.config.blueprint(rrb))
+            rr.send_blueprint(self.config.blueprint())
 
         # Start pubsubs and subscribe to all messages
         for pubsub in self.config.pubsubs:
