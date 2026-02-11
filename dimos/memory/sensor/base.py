@@ -36,9 +36,9 @@ class SensorStore(Generic[T], ABC):
     Implement 4 abstract methods for your backend (in-memory, pickle, sqlite, etc.).
     All iteration, streaming, and seek logic comes free from the base class.
 
-    T can be any type — timestamps are provided explicitly. For Timestamped
-    subclasses, convenience methods (save_ts, pipe_save_ts, consume_stream_ts)
-    automatically extract the .ts attribute.
+    T can be any type — timestamps are provided explicitly via the _raw methods.
+    The default save/pipe_save/consume_stream methods work with Timestamped data.
+    Use save_raw/pipe_save_raw/consume_stream_raw for non-Timestamped data.
     """
 
     @abstractmethod
@@ -65,20 +65,34 @@ class SensorStore(Generic[T], ABC):
         """Find closest timestamp. Backend can optimize (binary search, db index, etc.)."""
         ...
 
-    def save(self, timestamp: float, data: T) -> None:
-        """Save a single data item at the given timestamp."""
-        self._save(timestamp, data)
-
-    def save_ts(self, *data: Timestamped) -> None:
+    def save(self, *data: Timestamped) -> None:
         """Save one or more Timestamped items using their .ts attribute."""
         for item in data:
             self._save(item.ts, item)  # type: ignore[arg-type]
 
-    def pipe_save(self, key: Callable[[T], float]) -> Callable[[Observable[T]], Observable[T]]:
+    def save_raw(self, timestamp: float, data: T) -> None:
+        """Save a single data item at the given timestamp."""
+        self._save(timestamp, data)
+
+    def pipe_save(self, source: Observable[T]) -> Observable[T]:
+        """Operator for Observable.pipe() — saves Timestamped items using .ts.
+
+        Usage:
+            observable.pipe(store.pipe_save).subscribe(...)
+        """
+
+        def _save_and_return(data: T) -> T:
+            ts_data: Timestamped = data  # type: ignore[assignment]
+            self._save(ts_data.ts, data)
+            return data
+
+        return source.pipe(ops.map(_save_and_return))
+
+    def pipe_save_raw(self, key: Callable[[T], float]) -> Callable[[Observable[T]], Observable[T]]:
         """Operator for Observable.pipe() — saves each item using key(item) as timestamp.
 
         Usage:
-            observable.pipe(store.pipe_save(lambda x: x.ts)).subscribe(...)
+            observable.pipe(store.pipe_save_raw(lambda x: x.ts)).subscribe(...)
         """
 
         def _operator(source: Observable[T]) -> Observable[T]:
@@ -90,35 +104,11 @@ class SensorStore(Generic[T], ABC):
 
         return _operator
 
-    def pipe_save_ts(self, source: Observable[T]) -> Observable[T]:
-        """Operator for Observable.pipe() — saves Timestamped items using .ts.
-
-        Usage:
-            observable.pipe(store.pipe_save_ts).subscribe(...)
-        """
-
-        def _save_and_return(data: T) -> T:
-            ts_data: Timestamped = data  # type: ignore[assignment]
-            self._save(ts_data.ts, data)
-            return data
-
-        return source.pipe(ops.map(_save_and_return))
-
-    def consume_stream(
-        self, observable: Observable[T], key: Callable[[T], float]
-    ) -> rx.abc.DisposableBase:
-        """Subscribe to an observable and save each item using key(item) as timestamp.
-
-        Usage:
-            disposable = store.consume_stream(observable, key=lambda x: x.ts)
-        """
-        return observable.subscribe(on_next=lambda data: self._save(key(data), data))
-
-    def consume_stream_ts(self, observable: Observable[T]) -> rx.abc.DisposableBase:
+    def consume_stream(self, observable: Observable[T]) -> rx.abc.DisposableBase:
         """Subscribe to an observable and save Timestamped items using .ts.
 
         Usage:
-            disposable = store.consume_stream_ts(observable)
+            disposable = store.consume_stream(observable)
         """
 
         def _save_item(data: T) -> None:
@@ -126,6 +116,16 @@ class SensorStore(Generic[T], ABC):
             self._save(ts_data.ts, data)
 
         return observable.subscribe(on_next=_save_item)
+
+    def consume_stream_raw(
+        self, observable: Observable[T], key: Callable[[T], float]
+    ) -> rx.abc.DisposableBase:
+        """Subscribe to an observable and save each item using key(item) as timestamp.
+
+        Usage:
+            disposable = store.consume_stream_raw(observable, key=lambda x: x.ts)
+        """
+        return observable.subscribe(on_next=lambda data: self._save(key(data), data))
 
     def load(self, timestamp: float) -> T | None:
         """Load data at exact timestamp."""
