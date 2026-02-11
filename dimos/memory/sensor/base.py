@@ -52,6 +52,11 @@ class TimeSeriesStore(Generic[T], ABC):
         ...
 
     @abstractmethod
+    def _delete(self, timestamp: float) -> T | None:
+        """Delete data at exact timestamp. Returns the deleted item or None."""
+        ...
+
+    @abstractmethod
     def _iter_items(
         self, start: float | None = None, end: float | None = None
     ) -> Iterator[tuple[float, T]]:
@@ -131,9 +136,18 @@ class TimeSeriesStore(Generic[T], ABC):
         """Load data at exact timestamp."""
         return self._load(timestamp)
 
-    def get(self, timestamp: float, tolerance: float | None = None) -> T | None:
+    def get(self, timestamp: float, tolerance: float | None = 1.0) -> T | None:
         """Get data at exact timestamp or closest within tolerance."""
         return self.find_closest(timestamp, tolerance)
+
+    def add(self, data: Timestamped) -> None:
+        """Add a single Timestamped item using its .ts attribute."""
+        self._save(data.ts, data)  # type: ignore[arg-type]
+
+    def prune_old(self, cutoff: float) -> None:
+        """Prune items older than cutoff timestamp."""
+        for ts, _ in self._iter_items(end=cutoff):
+            self._delete(ts)
 
     def find_closest(
         self,
@@ -329,6 +343,10 @@ class InMemoryStore(TimeSeriesStore[T]):
 
     def _load(self, timestamp: float) -> T | None:
         return self._data.get(timestamp)
+
+    def _delete(self, timestamp: float) -> T | None:
+        self._sorted_timestamps = None  # Invalidate cache
+        return self._data.pop(timestamp, None)
 
     def _iter_items(
         self, start: float | None = None, end: float | None = None

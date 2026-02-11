@@ -92,6 +92,15 @@ class PickleDirStore(TimeSeriesStore[T]):
             return self._load_file(filepath)
         return None
 
+    def _delete(self, timestamp: float) -> T | None:
+        filepath = self._get_root_dir() / f"{timestamp}.pickle"
+        if filepath.exists():
+            data = self._load_file(filepath)
+            filepath.unlink()
+            self._timestamps = None  # Invalidate cache
+            return data
+        return None
+
     def _iter_items(
         self, start: float | None = None, end: float | None = None
     ) -> Iterator[tuple[float, T]]:

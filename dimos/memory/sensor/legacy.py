@@ -146,6 +146,10 @@ class LegacyPickleStore(TimeSeriesStore[T]):
                 return data
         return None
 
+    def _delete(self, timestamp: float) -> T | None:
+        """Delete not supported for legacy pickle format."""
+        raise NotImplementedError("LegacyPickleStore does not support deletion")
+
     def _iter_items(
         self, start: float | None = None, end: float | None = None
     ) -> Iterator[tuple[float, T]]:

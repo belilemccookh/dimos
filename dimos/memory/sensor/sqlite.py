@@ -143,6 +143,14 @@ class SqliteStore(TimeSeriesStore[T]):
         data: T = pickle.loads(row[0])
         return data
 
+    def _delete(self, timestamp: float) -> T | None:
+        data = self._load(timestamp)
+        if data is not None:
+            conn = self._get_conn()
+            conn.execute(f"DELETE FROM {self._table} WHERE timestamp = ?", (timestamp,))
+            conn.commit()
+        return data
+
     def _iter_items(
         self, start: float | None = None, end: float | None = None
     ) -> Iterator[tuple[float, T]]:
