@@ -18,7 +18,7 @@
 import json
 import threading
 import time
-from typing import Any, cast
+from typing import Any
 
 import cv2
 from dimos_lcm.std_msgs import String
@@ -352,7 +352,7 @@ class DroneTrackingModule(Module):
             overlay, error_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1
         )
 
-        return cast("NDArray[np.uint8]", overlay)
+        return overlay
 
     def _publish_status(self, status: dict[str, Any]) -> None:
         """Publish tracking status as JSON.

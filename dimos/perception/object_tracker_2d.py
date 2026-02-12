@@ -16,7 +16,6 @@ from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import cast
 
 import cv2
 
@@ -299,4 +298,4 @@ class ObjectTracker2D(Module[ObjectTracker2DConfig]):
         x1, y1, x2, y2 = bbox
         cv2.rectangle(viz_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(viz_image, "TRACKING", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        return cast("NDArray[np.uint8]", viz_image)
+        return viz_image

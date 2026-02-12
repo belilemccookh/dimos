@@ -15,7 +15,6 @@
 from dataclasses import dataclass
 import threading
 import time
-from typing import cast
 
 import cv2
 
@@ -601,7 +600,7 @@ class ObjectTracking(Module[ObjectTrackingConfig]):
             viz_image, status_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2
         )
 
-        return cast("NDArray[np.uint8]", viz_image)
+        return viz_image
 
     def _get_depth_from_bbox(self, bbox: list[int], depth_frame: np.ndarray) -> float | None:  # type: ignore[type-arg]
         """Calculate depth from bbox using the 25th percentile of closest points.

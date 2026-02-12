@@ -224,7 +224,7 @@ class ROSNav(
                 continue
             yield f"current position {tf.translation.x}, {tf.translation.y}"
 
-    @skill(stream=Stream.call_agent, reducer=Reducer.string)  # type: ignore[arg-type]
+    @skill(stream=Stream.call_agent, reducer=Reducer.string)  # type: ignore[untyped-decorator]
     def goto(self, x: float, y: float):  # type: ignore[no-untyped-def]
         """
         move the robot in relative coordinates
@@ -243,7 +243,7 @@ class ROSNav(
         self.navigate_to(pose_to)
         yield "arrived"
 
-    @skill(stream=Stream.call_agent, reducer=Reducer.string)  # type: ignore[arg-type]
+    @skill(stream=Stream.call_agent, reducer=Reducer.string)  # type: ignore[untyped-decorator]
     def goto_global(self, x: float, y: float) -> Generator[str, None, None]:
         """
         go to coordinates x,y in the map frame
