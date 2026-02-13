@@ -44,6 +44,7 @@ from dataclasses import dataclass, field, fields
 import enum
 import json
 import os
+from pathlib import Path
 import signal
 import subprocess
 import threading
@@ -72,17 +73,6 @@ class NativeModuleConfig(ModuleConfig):
     shutdown_timeout: float = 10.0
     log_format: LogFormat = LogFormat.TEXT
 
-    # Field names from base classes that should not be converted to CLI args
-    _BASE_FIELDS: frozenset[str] = field(default=frozenset(), init=False, repr=False, compare=False)
-
-    def __post_init__(self):
-        # Collect all field names from NativeModuleConfig and its parents
-        object.__setattr__(
-            self,
-            "_BASE_FIELDS",
-            frozenset(f.name for f in fields(NativeModuleConfig)),
-        )
-
     # Override in subclasses to exclude fields from CLI arg generation
     cli_exclude: frozenset[str] = frozenset()
 
@@ -93,9 +83,10 @@ class NativeModuleConfig(ModuleConfig):
         or its parents) and converts them to ``["--name", str(value)]`` pairs.
         Skips fields whose values are ``None`` and fields in ``cli_exclude``.
         """
+        ignore_fields = {f.name for f in fields(NativeModuleConfig)}
         args: list[str] = []
         for f in fields(self):
-            if f.name in self._BASE_FIELDS or f.name.startswith("_"):
+            if f.name in ignore_fields:
                 continue
             if f.name in self.cli_exclude:
                 continue
@@ -128,6 +119,8 @@ class NativeModule(Module):
     default_config: type[NativeModuleConfig] = NativeModuleConfig  # type: ignore[assignment]
     _process: subprocess.Popen[bytes] | None = None
     _io_threads: list[threading.Thread]
+    _watchdog: threading.Thread | None = None
+    _stopping: bool = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -140,16 +133,15 @@ class NativeModule(Module):
             return
 
         topics = self._collect_topics()
-        extra = self._build_extra_args()
 
         cmd = [self.config.executable]
         for name, topic_str in topics.items():
             cmd.extend([f"--{name}", topic_str])
-        cmd.extend(extra)
+        cmd.extend(self.config.to_cli_args())
         cmd.extend(self.config.extra_args)
 
         env = {**os.environ, **self.config.extra_env}
-        cwd = self.config.cwd
+        cwd = self.config.cwd or str(Path(self.config.executable).resolve().parent)
 
         logger.info("Starting native process", cmd=" ".join(cmd), cwd=cwd)
         self._process = subprocess.Popen(
@@ -161,13 +153,17 @@ class NativeModule(Module):
         )
         logger.info("Native process started", pid=self._process.pid)
 
+        self._stopping = False
         self._io_threads = [
             self._start_reader(self._process.stdout, "info"),
             self._start_reader(self._process.stderr, "warning"),
         ]
+        self._watchdog = threading.Thread(target=self._watch_process, daemon=True)
+        self._watchdog.start()
 
     @rpc
     def stop(self) -> None:
+        self._stopping = True
         if self._process is not None and self._process.poll() is None:
             logger.info("Stopping native process", pid=self._process.pid)
             self._process.send_signal(signal.SIGTERM)
@@ -181,6 +177,9 @@ class NativeModule(Module):
                 self._process.wait(timeout=5)
         for t in self._io_threads:
             t.join(timeout=2)
+        if self._watchdog is not None and self._watchdog is not threading.current_thread():
+            self._watchdog.join(timeout=2)
+        self._watchdog = None
         self._io_threads = []
         self._process = None
         super().stop()
@@ -190,6 +189,20 @@ class NativeModule(Module):
         t = threading.Thread(target=self._read_log_stream, args=(stream, level), daemon=True)
         t.start()
         return t
+
+    def _watch_process(self) -> None:
+        """Block until the native process exits; trigger stop() if it crashed."""
+        if self._process is None:
+            return
+        rc = self._process.wait()
+        if self._stopping:
+            return
+        logger.error(
+            "Native process died unexpectedly",
+            pid=self._process.pid,
+            returncode=rc,
+        )
+        self.stop()
 
     def _read_log_stream(self, stream: IO[bytes] | None, level: str) -> None:
         if stream is None:
@@ -206,8 +219,7 @@ class NativeModule(Module):
                     log_fn(event, **data)
                     continue
                 except (json.JSONDecodeError, TypeError):
-                    # TODO: log a warning about malformed JSON and the line contents
-                    pass
+                    logger.warning("malformed JSON from native module", raw=line)
             log_fn(line, pid=self._process.pid if self._process else None)
         stream.close()
 
@@ -226,15 +238,9 @@ class NativeModule(Module):
                 topics[name] = str(topic)
         return topics
 
-    def _build_extra_args(self) -> list[str]:
-        """Override in subclasses to pass additional config as CLI args.
-
-        Called after topic args, before ``config.extra_args``.
-        """
-        return []
-
 
 __all__ = [
+    "LogFormat",
     "NativeModule",
     "NativeModuleConfig",
 ]

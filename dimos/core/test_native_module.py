@@ -67,9 +67,6 @@ def read_json_file(path: str) -> dict[str, str]:
     return result
 
 
-# -- Test modules --
-
-
 @dataclass(kw_only=True)
 class StubNativeConfig(NativeModuleConfig):
     executable: str = _ECHO
@@ -82,10 +79,6 @@ class StubNativeModule(NativeModule):
     pointcloud: Out[PointCloud2]
     imu: Out[Imu]
     cmd_vel: In[Twist]
-
-    def _build_extra_args(self) -> list[str]:
-        cfg: StubNativeConfig = self.config  # type: ignore[assignment]
-        return ["--some_param", str(cfg.some_param)]
 
 
 class StubConsumer(Module):
@@ -103,6 +96,24 @@ class StubProducer(Module):
     @rpc
     def start(self) -> None:
         pass
+
+
+def test_process_crash_triggers_stop() -> None:
+    """When the native process dies unexpectedly, the watchdog calls stop()."""
+    mod = StubNativeModule(extra_env={"NATIVE_ECHO_DIE_AFTER": "0.2"})
+    mod.pointcloud.transport = LCMTransport("/pc", PointCloud2)
+    mod.start()
+
+    assert mod._process is not None
+    pid = mod._process.pid
+
+    # Wait for the process to die and the watchdog to call stop()
+    for _ in range(30):
+        time.sleep(0.1)
+        if mod._process is None:
+            break
+
+    assert mod._process is None, f"Watchdog did not clean up after process {pid} died"
 
 
 def test_manual(dimos_cluster, args_file) -> None:

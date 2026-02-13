@@ -11,7 +11,7 @@
 //   ./fastlio2_native \
 //       --lidar '/lidar#sensor_msgs.PointCloud2' \
 //       --odometry '/odometry#nav_msgs.Odometry' \
-//       --config_path /path/to/mid360.json \
+//       --config_path /path/to/mid360.yaml \
 //       --host_ip 192.168.1.5 --lidar_ip 192.168.1.155
 
 #include <lcm/lcm-cpp.hpp>
@@ -394,6 +394,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // FAST-LIO internal processing rates
+    double msr_freq = mod.arg_float("msr_freq", 50.0f);
+    double main_freq = mod.arg_float("main_freq", 5000.0f);
+
     // Livox hardware config
     std::string host_ip = mod.arg("host_ip", "192.168.1.5");
     std::string lidar_ip = mod.arg("lidar_ip", "192.168.1.155");
@@ -455,7 +459,7 @@ int main(int argc, char** argv) {
 
     // Init FAST-LIO with config
     printf("[fastlio2] Initializing FAST-LIO...\n");
-    FastLio fast_lio(config_path);
+    FastLio fast_lio(config_path, msr_freq, main_freq);
     g_fastlio = &fast_lio;
     printf("[fastlio2] FAST-LIO initialized.\n");
 
@@ -492,7 +496,7 @@ int main(int argc, char** argv) {
     auto frame_interval = std::chrono::microseconds(
         static_cast<int64_t>(1e6 / g_frequency));
     auto last_emit = std::chrono::steady_clock::now();
-    const double process_period_ms = 1000.0 / 5000.0;  // FAST-LIO processes at ~5kHz
+    const double process_period_ms = 1000.0 / main_freq;
 
     // Rate limiters for output publishing
     auto pc_interval = std::chrono::microseconds(

@@ -58,17 +58,20 @@ pkg_check_modules(LCM REQUIRED lcm)
 # Eigen3
 find_package(Eigen3 REQUIRED)
 
-# PCL
-find_package(PCL 1.8 REQUIRED)
+# PCL (only components we need — avoid full PCL which drags in VTK via io)
+find_package(PCL 1.8 REQUIRED COMPONENTS common filters)
 
-# nlohmann_json (FAST-LIO config parsing)
-find_package(nlohmann_json 3.2.0 REQUIRED)
+# yaml-cpp (FAST-LIO config parsing — standard YAML format)
+find_package(yaml-cpp REQUIRED)
 
-# Livox SDK2 (installed to /usr/local)
-find_library(LIVOX_SDK livox_lidar_sdk_shared HINTS /usr/local/lib)
+# Livox SDK2 (from nix or /usr/local fallback)
+find_library(LIVOX_SDK livox_lidar_sdk_shared)
 if(NOT LIVOX_SDK)
-  message(FATAL_ERROR "Livox SDK2 not found. Install from https://github.com/Livox-SDK/Livox-SDK2")
+  message(FATAL_ERROR "Livox SDK2 not found. Available via nix flake in lidar/livox/")
 endif()
+get_filename_component(LIVOX_SDK_LIB_DIR ${LIVOX_SDK} DIRECTORY)
+get_filename_component(LIVOX_SDK_PREFIX ${LIVOX_SDK_LIB_DIR} DIRECTORY)
+set(LIVOX_SDK_INCLUDE_DIR ${LIVOX_SDK_PREFIX}/include)
 
 add_executable(fastlio2_native
   main.cpp
@@ -84,14 +87,14 @@ target_include_directories(fastlio2_native PRIVATE
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}
-  /usr/local/include  # Livox SDK2 headers
+  ${LIVOX_SDK_INCLUDE_DIR}
 )
 
 target_link_libraries(fastlio2_native PRIVATE
   ${LCM_LIBRARIES}
   ${LIVOX_SDK}
   ${PCL_LIBRARIES}
-  nlohmann_json::nlohmann_json
+  yaml-cpp::yaml-cpp
 )
 
 if(OpenMP_CXX_FOUND)

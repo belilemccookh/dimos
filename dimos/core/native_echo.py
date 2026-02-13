@@ -16,12 +16,17 @@
 """Echo binary for NativeModule tests.
 
 Dumps CLI args as a JSON log line to stdout, then waits for SIGTERM.
+
+Env vars:
+    NATIVE_ECHO_OUTPUT: path to write CLI args as JSON
+    NATIVE_ECHO_DIE_AFTER: seconds to wait before exiting with code 42
 """
 
 import json
 import os
 import signal
 import sys
+import time
 
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
@@ -33,5 +38,10 @@ else:
     json.dump({"event": "echo_args", "args": sys.argv[1:]}, sys.stdout)
     sys.stdout.write("\n")
     sys.stdout.flush()
+
+die_after = os.environ.get("NATIVE_ECHO_DIE_AFTER")
+if die_after:
+    time.sleep(float(die_after))
+    sys.exit(42)
 
 signal.pause()

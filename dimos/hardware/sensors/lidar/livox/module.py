@@ -82,10 +82,6 @@ class Mid360Module(NativeModule, perception.Lidar, perception.IMU):
     pointcloud: Out[PointCloud2]
     imu: Out[Imu]
 
-    def _build_extra_args(self) -> list[str]:
-        """Pass hardware config to the C++ binary as CLI args."""
-        return self.config.to_cli_args()
-
 
 mid360_module = Mid360Module.blueprint
 

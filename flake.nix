@@ -10,12 +10,16 @@
     xome.inputs.nixpkgs.follows    = "nixpkgs";
     xome.inputs.flake-utils.follows = "flake-utils";
     diagon.url       = "github:petertrotman/nixpkgs/Diagon";
+    livox-sdk.url    = "path:./dimos/hardware/sensors/lidar/livox";
+    livox-sdk.inputs.nixpkgs.follows = "nixpkgs";
+    livox-sdk.inputs.flake-utils.follows = "flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, lib, xome, diagon, ... }:
+  outputs = { self, nixpkgs, flake-utils, lib, xome, diagon, livox-sdk, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        livox-sdk2 = livox-sdk.packages.${system}.livox-sdk2;
 
         # ------------------------------------------------------------
         # 1. Shared package list (tool-chain + project deps)
@@ -129,9 +133,10 @@
           { vals.pkg=pkgs.libjpeg_turbo; flags.ldLibraryGroup=true; }
           { vals.pkg=pkgs.libpng;        flags={}; }
 
-          ### FAST-LIO2 native module deps
+          ### LiDAR native module deps
+          { vals.pkg=livox-sdk2;                  flags.ldLibraryGroup=true; }
           { vals.pkg=pkgs.pcl;                    flags.ldLibraryGroup=true; }
-          { vals.pkg=pkgs.nlohmann_json;          flags={}; }
+          { vals.pkg=pkgs.yaml-cpp;               flags.ldLibraryGroup=true; }
           { vals.pkg=pkgs.llvmPackages.openmp;    flags.ldLibraryGroup=true; }
 
           ### Docs generators

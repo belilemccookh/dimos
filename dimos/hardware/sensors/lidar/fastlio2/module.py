@@ -19,21 +19,19 @@ Outputs registered (world-frame) point clouds and odometry with covariance.
 
 Usage::
 
-    from dimos.hardware.sensors.lidar.fastlio2.module import FastLio2Module
+    from dimos.hardware.sensors.lidar.fastlio2.module import FastLio2
     from dimos.core.blueprints import autoconnect
 
     autoconnect(
-        FastLio2Module.blueprint(host_ip="192.168.1.5"),
+        FastLio2.blueprint(host_ip="192.168.1.5"),
         SomeConsumer.blueprint(),
     ).build().loop()
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import json
+from dataclasses import dataclass
 from pathlib import Path
-import tempfile
 
 from dimos.core import Out  # noqa: TC001
 from dimos.core.native_module import NativeModule, NativeModuleConfig
@@ -41,7 +39,7 @@ from dimos.msgs.nav_msgs.Odometry import Odometry  # noqa: TC001
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2  # noqa: TC001
 
 _DEFAULT_EXECUTABLE = str(Path(__file__).parent / "cpp" / "build" / "fastlio2_native")
-_DEFAULT_CONFIG = str(Path(__file__).parent / "cpp" / "config" / "mid360.json")
+_CONFIG_DIR = Path(__file__).parent / "config"
 
 
 @dataclass(kw_only=True)
@@ -59,6 +57,10 @@ class FastLio2Config(NativeModuleConfig):
     frame_id: str = "map"
     child_frame_id: str = "body"
 
+    # FAST-LIO internal processing rates
+    msr_freq: float = 50.0
+    main_freq: float = 5000.0
+
     # Output publish rates (Hz)
     pointcloud_freq: float = 10.0
     odom_freq: float = 30.0
@@ -73,35 +75,9 @@ class FastLio2Config(NativeModuleConfig):
     map_voxel_size: float = 0.1
     map_max_range: float = 100.0
 
-    # FAST-LIO config (written to JSON, passed as --config_path — excluded from CLI)
-    cli_exclude: frozenset[str] = frozenset(
-        {
-            "scan_line",
-            "blind",
-            "fov_degree",
-            "det_range",
-            "acc_cov",
-            "gyr_cov",
-            "b_acc_cov",
-            "b_gyr_cov",
-            "extrinsic_est_en",
-            "extrinsic_t",
-            "extrinsic_r",
-        }
-    )
-    scan_line: int = 4
-    blind: float = 0.5
-    fov_degree: int = 360
-    det_range: float = 100.0
-    acc_cov: float = 0.1
-    gyr_cov: float = 0.1
-    b_acc_cov: float = 0.0001
-    b_gyr_cov: float = 0.0001
-    extrinsic_est_en: bool = True
-    extrinsic_t: list[float] = field(default_factory=lambda: [-0.011, -0.02329, 0.04412])
-    extrinsic_r: list[float] = field(
-        default_factory=lambda: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-    )
+    # FAST-LIO YAML config (relative to config/ dir, or absolute path)
+    # C++ binary reads YAML directly via yaml-cpp
+    config: str = "mid360.yaml"
 
     # SDK port configuration (for multi-sensor setups)
     cmd_data_port: int = 56100
@@ -114,6 +90,19 @@ class FastLio2Config(NativeModuleConfig):
     host_point_data_port: int = 56301
     host_imu_data_port: int = 56401
     host_log_data_port: int = 56501
+
+    # Resolved in __post_init__, passed as --config_path to the binary
+    config_path: str | None = None
+
+    # config is not a CLI arg (config_path is)
+    cli_exclude: frozenset[str] = frozenset({"config"})
+
+    def __post_init__(self) -> None:
+        if self.config_path is None:
+            path = Path(self.config)
+            if not path.is_absolute():
+                path = _CONFIG_DIR / path
+            self.config_path = str(path.resolve())
 
 
 class FastLio2(NativeModule):
@@ -129,44 +118,6 @@ class FastLio2(NativeModule):
     lidar: Out[PointCloud2]
     odometry: Out[Odometry]
     global_map: Out[PointCloud2]
-
-    def _build_extra_args(self) -> list[str]:
-        """Pass hardware and SLAM config to the C++ binary as CLI args."""
-        cfg: FastLio2Config = self.config  # type: ignore[assignment]
-        config_path = self._write_fastlio_config(cfg)
-        return ["--config_path", config_path, *cfg.to_cli_args()]
-
-    @staticmethod
-    def _write_fastlio_config(cfg: FastLio2Config) -> str:
-        """Write FAST-LIO JSON config to a temp file, return path."""
-        config = {
-            "common": {
-                "time_sync_en": False,
-                "time_offset_lidar_to_imu": 0.0,
-                "msr_freq": 50.0,
-                "main_freq": 5000.0,
-            },
-            "preprocess": {
-                "lidar_type": 1,
-                "scan_line": cfg.scan_line,
-                "blind": cfg.blind,
-            },
-            "mapping": {
-                "acc_cov": cfg.acc_cov,
-                "gyr_cov": cfg.gyr_cov,
-                "b_acc_cov": cfg.b_acc_cov,
-                "b_gyr_cov": cfg.b_gyr_cov,
-                "fov_degree": cfg.fov_degree,
-                "det_range": cfg.det_range,
-                "extrinsic_est_en": cfg.extrinsic_est_en,
-                "extrinsic_T": list(cfg.extrinsic_t),
-                "extrinsic_R": list(cfg.extrinsic_r),
-            },
-        }
-        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="fastlio2_", delete=False)
-        json.dump(config, f, indent=2)
-        f.close()
-        return f.name
 
 
 fastlio2_module = FastLio2.blueprint

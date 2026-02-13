@@ -17,11 +17,14 @@ FetchContent_MakeAvailable(dimos_lcm)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LCM REQUIRED lcm)
 
-# Livox SDK2 (installed to /usr/local)
-find_library(LIVOX_SDK livox_lidar_sdk_shared HINTS /usr/local/lib)
+# Livox SDK2 (from nix or /usr/local fallback)
+find_library(LIVOX_SDK livox_lidar_sdk_shared)
 if(NOT LIVOX_SDK)
-  message(FATAL_ERROR "Livox SDK2 not found. Install from https://github.com/Livox-SDK/Livox-SDK2")
+  message(FATAL_ERROR "Livox SDK2 not found. Available via nix flake in lidar/livox/")
 endif()
+get_filename_component(LIVOX_SDK_LIB_DIR ${LIVOX_SDK} DIRECTORY)
+get_filename_component(LIVOX_SDK_PREFIX ${LIVOX_SDK_LIB_DIR} DIRECTORY)
+set(LIVOX_SDK_INCLUDE_DIR ${LIVOX_SDK_PREFIX}/include)
 
 add_executable(mid360_native main.cpp)
 
@@ -29,7 +32,7 @@ target_include_directories(mid360_native PRIVATE
   ${dimos_lcm_SOURCE_DIR}/generated/cpp_lcm_msgs
   ${LCM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}
-  /usr/local/include  # Livox SDK2 headers
+  ${LIVOX_SDK_INCLUDE_DIR}
 )
 
 target_link_libraries(mid360_native PRIVATE
