@@ -13,19 +13,19 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
 from typing import Any
 
 from reactivex.disposable import Disposable
-from dataclasses import dataclass
 
 from dimos import spec
-from dimos.core import DimosCluster, In, Module, rpc, ModuleConfig
+from dimos.core import DimosCluster, In, Module, ModuleConfig, rpc
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.msgs.geometry_msgs import Twist
-from dimos.robot.unitree.connection import UnitreeWebRTCConnection
-from dimos.utils.logging_config import setup_logger
-from dimos.robot.unitree.g1.api import G1Api
 from dimos.protocol.service import Configurable
+from dimos.robot.unitree.connection import UnitreeWebRTCConnection
+from dimos.robot.unitree.g1.api import G1Api
+from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
@@ -35,15 +35,16 @@ class G1Config(ModuleConfig):
     ip: str | None
     api_type: str | None = None
     network_interface: str = "eth0"
-    
+
+
 class G1(Module, Configurable):
     default_config = G1Config
     config: G1Config
-    
+
     cmd_vel: In[Twist]
-    
+
     api: G1Api | None = None
-    
+
     _global_config: GlobalConfig
 
     def __init__(
@@ -76,15 +77,11 @@ class G1(Module, Configurable):
 
                 mode = getattr(self._global_config, "g1_mode", "ai")
                 logger.info(f"Using onboard SDK api on {self.network_interface}")
-                self.api = G1Onboardapi(
-                    network_interface=self.network_interface, mode=mode
-                )
+                self.api = G1Onboardapi(network_interface=self.network_interface, mode=mode)
             case "replay":
                 raise ValueError("Replay api not implemented for G1 robot")
             case "mujoco":
-                raise ValueError(
-                    "This module does not support simulation, use G1Simapi instead"
-                )
+                raise ValueError("This module does not support simulation, use G1Simapi instead")
             case _:
                 raise ValueError(f"Unknown api type: {self.api_type}")
 
@@ -109,8 +106,6 @@ class G1(Module, Configurable):
         logger.info(f"Publishing request to topic: {topic} with data: {data}")
         assert self.api is not None
         return self.api.publish_request(topic, data)  # type: ignore[no-any-return]
-    
-
 
 
 class G1Connection(Module):
@@ -185,6 +180,7 @@ class G1Connection(Module):
         logger.info(f"Publishing request to topic: {topic} with data: {data}")
         assert self.connection is not None
         return self.connection.publish_request(topic, data)  # type: ignore[no-any-return]
+
 
 g1_connection = G1Connection.blueprint
 

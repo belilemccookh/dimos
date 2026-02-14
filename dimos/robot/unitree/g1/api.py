@@ -15,8 +15,8 @@
 from typing import Protocol
 
 from dimos.core import Out
-from dimos.msgs.nav_msgs import OccupancyGrid
 from dimos.msgs.sensor_msgs import PointCloud2
+
 
 # Every form of the G1 (Simulation, Replay, Sdk) needs to implement this spec
 class G1Api(Protocol):
