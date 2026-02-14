@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Arrow key control for G1 robot.
 Use arrow keys and WASD for real-time robot control.
@@ -6,6 +20,7 @@ Use arrow keys and WASD for real-time robot control.
 
 import curses
 import time
+
 from dimos.msgs.geometry_msgs import Twist, Vector3
 from dimos.robot.unitree.g1.onboard_connection import G1OnboardConnection
 
@@ -52,8 +67,8 @@ def draw_ui(stdscr, state_text="Not connected"):
 def main(stdscr):
     # Setup curses
     curses.curs_set(0)  # Hide cursor
-    stdscr.nodelay(1)   # Non-blocking input
-    stdscr.timeout(100) # 100ms timeout for getch()
+    stdscr.nodelay(1)  # Non-blocking input
+    stdscr.timeout(100)  # 100ms timeout for getch()
 
     draw_ui(stdscr, "Initializing...")
 
@@ -65,7 +80,7 @@ def main(stdscr):
     draw_ui(stdscr, "✓ Connected - Ready for commands")
 
     # Movement parameters
-    linear_speed = 0.3   # m/s for forward/backward/strafe
+    linear_speed = 0.3  # m/s for forward/backward/strafe
     angular_speed = 0.5  # rad/s for rotation
     move_duration = 0.2  # Duration of each movement pulse
 
@@ -99,41 +114,41 @@ def main(stdscr):
             action = None
 
             # Arrow keys
-            if key == curses.KEY_UP or key_char == 'w':
+            if key == curses.KEY_UP or key_char == "w":
                 twist = Twist(linear=Vector3(linear_speed, 0, 0), angular=Vector3(0, 0, 0))
                 action = "Moving forward..."
-            elif key == curses.KEY_DOWN or key_char == 's':
+            elif key == curses.KEY_DOWN or key_char == "s":
                 twist = Twist(linear=Vector3(-linear_speed, 0, 0), angular=Vector3(0, 0, 0))
                 action = "Moving backward..."
-            elif key == curses.KEY_LEFT or key_char == 'a':
+            elif key == curses.KEY_LEFT or key_char == "a":
                 twist = Twist(linear=Vector3(0, 0, 0), angular=Vector3(0, 0, angular_speed))
                 action = "Rotating left..."
-            elif key == curses.KEY_RIGHT or key_char == 'd':
+            elif key == curses.KEY_RIGHT or key_char == "d":
                 twist = Twist(linear=Vector3(0, 0, 0), angular=Vector3(0, 0, -angular_speed))
                 action = "Rotating right..."
-            elif key_char == 'q':
+            elif key_char == "q":
                 twist = Twist(linear=Vector3(0, linear_speed, 0), angular=Vector3(0, 0, 0))
                 action = "Strafing left..."
-            elif key_char == 'e':
+            elif key_char == "e":
                 twist = Twist(linear=Vector3(0, -linear_speed, 0), angular=Vector3(0, 0, 0))
                 action = "Strafing right..."
-            elif key_char == ' ':
+            elif key_char == " ":
                 conn.stop()
                 action = "🛑 Stopped"
                 last_cmd_time = current_time
 
             # Robot state commands
-            elif key_char == '1':
+            elif key_char == "1":
                 draw_ui(stdscr, "Standing up...")
                 conn.standup()
                 action = "✓ Standup complete"
                 last_cmd_time = current_time
-            elif key_char == '2':
+            elif key_char == "2":
                 draw_ui(stdscr, "Lying down...")
                 conn.liedown()
                 action = "✓ Liedown complete"
                 last_cmd_time = current_time
-            elif key_char == 'r':
+            elif key_char == "r":
                 state = conn.get_state()
                 action = f"State: {state}"
                 last_cmd_time = current_time
@@ -168,6 +183,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n✗ Error: {e}")
         import traceback
+
         traceback.print_exc()
 
     print("\n✓ Done")
