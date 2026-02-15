@@ -67,11 +67,6 @@ from dimos.visualization.rerun.bridge import RerunBridgeModule
 from dimos.hardware.camera.module import CameraModule
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 
-# will not be rendered anywhere
-headless_camera = autoconnect(
-    CameraModule.blueprint(),
-)
-# will be rendered in rerun native
 camera_demo = autoconnect(
     CameraModule.blueprint(),
     RerunBridgeModule.blueprint(
