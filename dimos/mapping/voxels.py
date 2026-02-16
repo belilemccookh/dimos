@@ -46,6 +46,7 @@ class Config(ModuleConfig):
     # Auto-scaling: skip frames when processing can't keep up
     autoscale: bool = True
     autoscale_min_frequency: float = 1.0  # never drop below this Hz
+    enable_telemetry: bool = True  # log timing metrics to rerun
 
 
 class VoxelGridMapper(Module):
@@ -138,9 +139,10 @@ class VoxelGridMapper(Module):
         self._last_ingest_duration = ingest_duration
         self._frames_processed += 1
 
-        rr.log("voxel_mapper/ingest_time_ms", rr.Scalars(ingest_duration * 1000))
-        rr.log("voxel_mapper/map_size", rr.Scalars(self.size()))
-        rr.log("voxel_mapper/frames_skipped", rr.Scalars(self._frames_skipped))
+        if self.config.enable_telemetry:
+            rr.log("voxel_mapper/ingest_time_ms", rr.Scalars(ingest_duration * 1000))
+            rr.log("voxel_mapper/map_size", rr.Scalars(self.size()))
+            rr.log("voxel_mapper/frames_skipped", rr.Scalars(self._frames_skipped))
 
         if self.config.publish_interval == 0 and hasattr(self, "_publish_trigger"):
             self._publish_trigger.on_next(None)
@@ -151,7 +153,8 @@ class VoxelGridMapper(Module):
         publish_duration = time.monotonic() - t0
 
         self._last_publish_duration = publish_duration
-        rr.log("voxel_mapper/publish_time_ms", rr.Scalars(publish_duration * 1000))
+        if self.config.enable_telemetry:
+            rr.log("voxel_mapper/publish_time_ms", rr.Scalars(publish_duration * 1000))
 
         self.global_map.publish(pc)
 
