@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2026 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +14,6 @@
 
 """AGIbot test blueprints."""
 
-from .agibot_nav_test import agibot_nav_test
+from dimos.robot.agibot.blueprints.test.agibot_nav_test import agibot_nav_test
 
 __all__ = ["agibot_nav_test"]

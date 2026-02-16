@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2026 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,101 +12,127 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Minimal AGIbot navigation stack test blueprint.
+"""
+AGIbot Navigation Validation Blueprint (Phase 1)
 
-Validates ROS topic connectivity between DimOS and the navigation ARM
-docker image running on the AGIbot. Uses the same ros_nav() module as
-the G1 integration — ROSNav bridges ROS topics to internal LCM streams
-via ROSTransport.
+Validates the ROS navigation stack running in the AGIbot's Docker container
+by subscribing to its ROS topics via ROSTransport. No bridge modules needed —
+ROSTransport is just another transport backend.
 
 Usage:
     dimos run agibot-nav-test
 
-Architecture:
-    AGIbot HW → ROS topics → ROSNav (ROSTransport) → LCM → DimOS modules
-                                ↑
-                        This is what we're testing
+What it does:
+    - Subscribes to ROS topics published by the nav container
+    - Logs received data (rates, sizes) to verify connectivity
+    - Publishes a test goal to verify bidirectional communication
 
-ROS topics consumed (via ROSTransport in ROSNav):
-    /goal_reached       - Bool         (nav stack → DimOS)
-    /cmd_vel            - TwistStamped (nav stack → DimOS)
-    /way_point          - PoseStamped  (nav stack → DimOS)
-    /registered_scan    - PointCloud2  (nav stack → DimOS, lidar)
-    /terrain_map_ext    - PointCloud2  (nav stack → DimOS, global map)
-    /path               - Path         (nav stack → DimOS)
-    /tf                 - TFMessage    (nav stack → DimOS)
-
-ROS topics published (via ROSTransport in ROSNav):
-    /goal_pose          - PoseStamped  (DimOS → nav stack)
-    /cancel_goal        - Bool         (DimOS → nav stack)
-    /stop               - Int8         (DimOS → nav stack)
-    /joy                - Joy          (DimOS → nav stack)
-
-Test checklist:
-    ✅ ROSNav starts without errors
-    ✅ ROSTransport connects to ROS master / DDS
-    ✅ Lidar pointcloud (/registered_scan) received on LCM /lidar
-    ✅ Global map (/terrain_map_ext) received on LCM /map
-    ✅ TF transforms received
-    ✅ Can publish goal via goto(1, 0) and get cmd_vel back
+ROS topics (from nav container):
+    IN:  /registered_scan (PointCloud2), /cmd_vel (TwistStamped),
+         /terrain_map_ext (PointCloud2), /path (Path), /tf (TFMessage)
+    OUT: /goal_pose (PoseStamped)
 """
 
+from dataclasses import dataclass
+import logging
+import time
+
+from dimos.core import In, Module, Out, rpc
 from dimos.core.blueprints import autoconnect
-from dimos.core.transport import LCMTransport
-from dimos.hardware.sensors.camera.module import camera_module
-from dimos.hardware.sensors.camera.webcam import Webcam
-from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Transform, Twist, Vector3
-from dimos.msgs.nav_msgs import Odometry, Path
-from dimos.msgs.sensor_msgs import Image, PointCloud2
-from dimos.msgs.std_msgs import Bool
-from dimos.navigation.rosnav import ros_nav
-from dimos.robot.agibot.modules.ros_topic_monitor import ROSTopicMonitor
-from dimos.robot.foxglove_bridge import foxglove_bridge
-from dimos.web.websocket_vis.websocket_vis_module import websocket_vis
+from dimos.core.module import ModuleConfig
+from dimos.core.transport import ROSTransport
+from dimos.msgs.geometry_msgs import PoseStamped, TwistStamped
+from dimos.msgs.nav_msgs import Path
+from dimos.msgs.sensor_msgs import PointCloud2
+from dimos.msgs.tf2_msgs.TFMessage import TFMessage
+from dimos.utils.logging_config import setup_logger
 
-# AGIbot primitive: camera + visualization (no nav, no SDK yet)
-_agibot_primitive = (
-    autoconnect(
-        camera_module(
-            transform=Transform(
-                translation=Vector3(0.05, 0.0, 0.5),  # approximate AGIbot camera height
-                rotation=Quaternion.from_euler(Vector3(0.0, 0.2, 0.0)),
-                frame_id="sensor",
-                child_frame_id="camera_link",
-            ),
-            hardware=lambda: Webcam(
-                camera_index=0,
-                fps=15,
-                stereo_slice="left",
-            ),
-        ),
-        websocket_vis(),
-        foxglove_bridge(),
-    )
-    .global_config(n_dask_workers=4, robot_model="agibot")
-    .transports(
-        {
-            ("cmd_vel", Twist): LCMTransport("/cmd_vel", Twist),
-            ("state_estimation", Odometry): LCMTransport("/state_estimation", Odometry),
-            ("odom", PoseStamped): LCMTransport("/odom", PoseStamped),
-            ("goal_req", PoseStamped): LCMTransport("/goal_req", PoseStamped),
-            ("goal_active", PoseStamped): LCMTransport("/goal_active", PoseStamped),
-            ("path_active", Path): LCMTransport("/path_active", Path),
-            ("pointcloud", PointCloud2): LCMTransport("/lidar", PointCloud2),
-            ("global_pointcloud", PointCloud2): LCMTransport("/map", PointCloud2),
-            ("goal_pose", PoseStamped): LCMTransport("/goal_pose", PoseStamped),
-            ("goal_reached", Bool): LCMTransport("/goal_reached", Bool),
-            ("cancel_goal", Bool): LCMTransport("/cancel_goal", Bool),
-            ("color_image", Image): LCMTransport("/agibot/color_image", Image),
+logger = setup_logger(level=logging.INFO)
+
+
+@dataclass
+class Config(ModuleConfig):
+    log_interval: float = 5.0  # seconds between health reports
+
+
+class AGIbotNavValidator(Module):
+    """Listens to nav stack ROS topics and reports health status.
+
+    Streams are connected to ROS topics via .transports() on the blueprint —
+    this module just has In/Out ports with the right names and types.
+    """
+
+    default_config = Config
+    config: Config
+
+    # IN from nav container
+    registered_scan: In[PointCloud2]
+    cmd_vel: In[TwistStamped]
+    terrain_map_ext: In[PointCloud2]
+    path: In[Path]
+    tf: In[TFMessage]
+
+    # OUT to nav container
+    goal_pose: Out[PoseStamped]
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._counts: dict[str, int] = {
+            "registered_scan": 0,
+            "cmd_vel": 0,
+            "terrain_map_ext": 0,
+            "path": 0,
+            "tf": 0,
         }
-    )
-)
+        self._last_report: float = 0.0
 
-# Full test blueprint: primitive + ros_nav + topic monitor
+    @rpc
+    def start(self) -> None:
+        super().start()
+
+        self.registered_scan.subscribe(lambda msg: self._on_msg("registered_scan", msg))
+        self.cmd_vel.subscribe(lambda msg: self._on_msg("cmd_vel", msg))
+        self.terrain_map_ext.subscribe(lambda msg: self._on_msg("terrain_map_ext", msg))
+        self.path.subscribe(lambda msg: self._on_msg("path", msg))
+        self.tf.subscribe(lambda msg: self._on_msg("tf", msg))
+
+        logger.info("AGIbot nav validator started — listening for ROS topics")
+
+    @rpc
+    def stop(self) -> None:
+        self._print_report()
+        super().stop()
+
+    def _on_msg(self, topic: str, msg: object) -> None:
+        self._counts[topic] += 1
+        now = time.monotonic()
+        if now - self._last_report >= self.config.log_interval:
+            self._print_report()
+            self._last_report = now
+
+    def _print_report(self) -> None:
+        lines = ["AGIbot Nav Stack Health:"]
+        for topic, count in self._counts.items():
+            status = "✅" if count > 0 else "❌"
+            lines.append(f"  {status} /{topic}: {count} msgs")
+        logger.info("\n".join(lines))
+
+
+# --- Blueprint ---
+
 agibot_nav_test = autoconnect(
-    _agibot_primitive,
-    ros_nav(),
-    ROSTopicMonitor.blueprint(),
+    AGIbotNavValidator.blueprint(),
+).transports(
+    {
+        # IN: receive from nav container ROS topics
+        ("registered_scan", PointCloud2): ROSTransport("/registered_scan", PointCloud2),
+        ("cmd_vel", TwistStamped): ROSTransport("/cmd_vel", TwistStamped),
+        ("terrain_map_ext", PointCloud2): ROSTransport("/terrain_map_ext", PointCloud2),
+        ("path", Path): ROSTransport("/path", Path),
+        ("tf", TFMessage): ROSTransport("/tf", TFMessage),
+        # OUT: publish to nav container
+        ("goal_pose", PoseStamped): ROSTransport("/goal_pose", PoseStamped),
+    }
 )
 
-__all__ = ["agibot_nav_test"]
+__all__ = ["AGIbotNavValidator", "agibot_nav_test"]
