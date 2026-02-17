@@ -131,13 +131,19 @@ class VoxelGridMapper(Module):
     def _on_frame(self, frame: PointCloud2) -> None:
         if self.config.autoscale and self._frames_processed > 0:
             now = time.monotonic()
+            # _last_ingest_time is set *after* processing completes, so this
+            # measures idle time since the last frame finished — not since it started.
+            # If idle time < last processing duration, we're falling behind: skip.
             elapsed_since_last = now - self._last_ingest_time
 
-            # Self-regulate: skip frames we can't keep up with.
-            # Use last processing duration as the throttle interval,
-            # but cap at min_frequency so the map never goes completely stale.
-            max_interval = 1.0 / self.config.autoscale_min_frequency
-            throttle_interval = min(self._last_ingest_duration, max_interval)
+            # Guard against misconfiguration: min_frequency=0 would divide by zero.
+            # Treat 0 (or negative) as "no minimum floor" → use processing time only.
+            if self.config.autoscale_min_frequency > 0:
+                max_interval = 1.0 / self.config.autoscale_min_frequency
+                throttle_interval = min(self._last_ingest_duration, max_interval)
+            else:
+                throttle_interval = self._last_ingest_duration
+
             if elapsed_since_last < throttle_interval:
                 self._frames_skipped += 1
                 return
@@ -146,7 +152,9 @@ class VoxelGridMapper(Module):
         self.add_frame(frame)
         ingest_duration = time.monotonic() - t0
 
-        self._last_ingest_time = t0
+        # Record completion time (not start time) so the next frame's elapsed
+        # measures idle time between frames, enabling real saturation detection.
+        self._last_ingest_time = time.monotonic()
         self._last_ingest_duration = ingest_duration
         self._frames_processed += 1
 

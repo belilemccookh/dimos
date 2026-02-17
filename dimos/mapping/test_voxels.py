@@ -180,10 +180,12 @@ def test_roundtrip(moment1: Go2MapperMoment, voxel_size: float, expected_points:
 
 
 def test_autoscale_skips_when_saturated() -> None:
-    """Test that autoscale skips frames when processing can't keep up.
+    """Test that autoscale skips frames when idle time < last processing duration.
 
-    Simulates a slow machine by pretending add_frame() took 500ms,
-    then feeding frames faster than that interval.
+    _last_ingest_time is set after processing completes, so elapsed_since_last
+    measures idle time between frames. We fake both _last_ingest_time and
+    _last_ingest_duration to simulate a machine that just finished a slow frame
+    and is receiving new frames immediately after.
     """
     data_dir = get_data("unitree_go2_office_walk2")
     lidar_store = TimedSensorReplay(f"{data_dir}/lidar")
@@ -196,15 +198,17 @@ def test_autoscale_skips_when_saturated() -> None:
     mapper._on_frame(frame)
     assert mapper._frames_processed == 1
 
-    # Fake that add_frame() took 500ms — simulates a slow machine
-    mapper._last_ingest_duration = 0.5
+    # Simulate: last frame just finished (ingest_time = now) and took 500ms.
+    # Next frames arriving with only 10ms idle time should be skipped.
+    mapper._last_ingest_time = time.monotonic()
+    mapper._last_ingest_duration = 0.5  # pretend last frame took 500ms
 
-    # Now feed 10 more frames with only 10ms between them (faster than 500ms threshold)
+    # Feed 10 frames with only 10ms idle time — well under the 500ms threshold
     frames_fed = 1  # already fed one
     for i in range(10):
         frame = lidar_store.find_closest_seek(1.5 + i * 0.1)
         if frame is not None:
-            time.sleep(0.01)  # 10ms between frames — way faster than 500ms
+            time.sleep(0.01)  # 10ms idle — way less than 500ms processing time
             mapper._on_frame(frame)
             frames_fed += 1
 
@@ -213,15 +217,28 @@ def test_autoscale_skips_when_saturated() -> None:
         f"processed {mapper._frames_processed}, skipped {mapper._frames_skipped}"
     )
 
-    # Most frames should be skipped since we faked 500ms processing time
-    # and only 100ms total elapsed
+    # Most frames should be skipped: idle time (10ms) < processing time (500ms)
     assert mapper._frames_skipped > 0
     assert mapper._frames_processed < frames_fed
-    # Total should add up
     assert mapper._frames_processed + mapper._frames_skipped == frames_fed
-    # Map should have data
     assert mapper.size() > 0
 
+    mapper.stop()
+
+
+def test_autoscale_min_frequency_zero_no_crash() -> None:
+    """Test that autoscale_min_frequency=0 doesn't raise ZeroDivisionError."""
+    data_dir = get_data("unitree_go2_office_walk2")
+    lidar_store = TimedSensorReplay(f"{data_dir}/lidar")
+
+    mapper = VoxelGridMapper(autoscale=True, autoscale_min_frequency=0)
+
+    for i in range(5):
+        frame = lidar_store.find_closest_seek(i)
+        if frame is not None:
+            mapper._on_frame(frame)  # must not raise ZeroDivisionError
+
+    assert mapper._frames_processed >= 1
     mapper.stop()
 
 
