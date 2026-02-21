@@ -74,9 +74,7 @@
 
           ### Python + static analysis
           { vals.pkg=pkgs.python312;                    flags={}; vals.pythonMinorVersion="12";}
-          { vals.pkg=pkgs.python312Packages.pip;        flags={}; }
-          { vals.pkg=pkgs.python312Packages.setuptools; flags={}; }
-          { vals.pkg=pkgs.python312Packages.virtualenv; flags={}; }
+          { vals.pkg=pkgs.uv;                           flags={}; }
           { vals.pkg=pkgs.pre-commit;                   flags={}; }
 
           ### Runtime deps
@@ -193,11 +191,16 @@
             strAppend="/lib/python3.${aggregation.mergedVals.pythonMinorVersion}/site-packages";
             strJoin=":";
         });
+        groups = {
+            inherit ldLibraryPackages giTypelibPackagesString packageConfPackagesString manualPythonPackages;
+        };
 
         # ------------------------------------------------------------
         # 3. Host interactive shell  →  `nix develop`
         # ------------------------------------------------------------
-        shellHook = ''
+        envVarsShellHook = ''
+          export UV_PYTHON="${pkgs.python312}/bin/python3.${aggregation.mergedVals.pythonMinorVersion}"
+          export UV_PYTHON_PREFERENCE="only-system" # force uv to use the nix python
           shopt -s nullglob 2>/dev/null || setopt +o nomatch 2>/dev/null || true # allow globs to be empty without throwing an error
           if [ "$OSTYPE" = "linux-gnu" ]; then
             export CC="cc-no-usr-include" # basically patching for nix
@@ -219,6 +222,9 @@
           # CC, CFLAGS, and LDFLAGS are bascially all for `pip install pyaudio`
           export CFLAGS="$(pkg-config --cflags portaudio-2.0) $CFLAGS"
           export LDFLAGS="-L$(pkg-config --variable=libdir portaudio-2.0) $LDFLAGS"
+        '';
+        shellHook = ''
+          ${envVarsShellHook}
 
           # without this alias, the pytest uses the non-venv python and fails
           alias pytest="python -m pytest"
@@ -270,6 +276,7 @@
                     setopt interactivecomments
                     # fix emoji prompt offset issues (this shouldn't lock people into English b/c LANG can be non-english)
                     export LC_CTYPE=en_US.UTF-8
+                    export GIT_LFS_SKIP_SMUDGE=1
                     ${shellHook}
                   '';
                 };
@@ -298,6 +305,14 @@
         };
 
       in {
+        # for re-use in other flakes
+        vars = {
+            inherit devPackages groups aggregation lib;
+            # what other flakes will use
+            shellHook = envVarsShellHook;
+            # what someone would use if they weren't really managing their own project
+            fullShell = shellHook;
+        };
         ## Local dev shell
         devShells = devShells;
 
