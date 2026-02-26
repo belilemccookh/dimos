@@ -394,11 +394,11 @@ class ControlCoordinator(Module[ControlCoordinatorConfig]):
                 logger.warning(f"Hardware {component.hardware_id} already registered")
                 return False
 
-            if is_gripper:
+            if is_gripper and isinstance(adapter, ManipulatorAdapter):
                 from dimos.control.hardware_interface import ConnectedGripper
 
                 connected: ConnectedHardware = ConnectedGripper(
-                    adapter=adapter,  # type: ignore[arg-type]
+                    adapter=adapter,
                     component=component,
                 )
             elif isinstance(adapter, TwistBaseAdapter):

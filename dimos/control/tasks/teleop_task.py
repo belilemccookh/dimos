@@ -79,7 +79,7 @@ class TeleopIKTaskConfig:
     ee_joint_id: int
     priority: int = 10
     timeout: float = 0.5
-    max_joint_delta_deg: float = 20.0
+    max_joint_delta_deg: float = 5.0  # ~500°/s at 100Hz
     hand: str = ""
     gripper_joint: str | None = None
     gripper_open_pos: float = 0.0

@@ -34,6 +34,7 @@ all_blueprints = {
     "coordinator-piper-xarm": "dimos.control.blueprints:coordinator_piper_xarm",
     "coordinator-teleop-dual": "dimos.control.blueprints:coordinator_teleop_dual",
     "coordinator-teleop-piper": "dimos.control.blueprints:coordinator_teleop_piper",
+    "coordinator-teleop-xarm6": "dimos.control.blueprints:coordinator_teleop_xarm6",
     "coordinator-teleop-xarm7": "dimos.control.blueprints:coordinator_teleop_xarm7",
     "coordinator-velocity-xarm6": "dimos.control.blueprints:coordinator_velocity_xarm6",
     "coordinator-xarm6": "dimos.control.blueprints:coordinator_xarm6",
