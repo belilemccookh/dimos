@@ -48,6 +48,7 @@ from dimos.core.module import ModuleConfig
 from dimos.hardware.drive_trains.spec import (
     TwistBaseAdapter,
 )
+from dimos.hardware.manipulators.spec import ManipulatorAdapter
 from dimos.msgs.geometry_msgs import (
     PoseStamped,  # noqa: TC001 - needed at runtime for In[PoseStamped]
     Twist,  # noqa: TC001 - needed at runtime for In[Twist]
@@ -64,7 +65,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from dimos.hardware.manipulators.spec import ManipulatorAdapter
 
 logger = setup_logger()
 
