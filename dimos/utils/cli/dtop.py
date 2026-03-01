@@ -116,12 +116,13 @@ _LINE1: list[tuple[str, str, Callable[[float], str]]] = [
 _LINE2: list[tuple[str, str, Callable[[float], str]]] = [
     ("UserT", "cpu_time_user", _fmt_secs),
     ("SysT", "cpu_time_system", _fmt_secs),
-    ("IOT", "cpu_time_iowait", _fmt_secs),
-    ("IO read", "io_read_bytes", _fmt_io),
-    ("IO write", "io_write_bytes", _fmt_io),
+    ("ioT", "cpu_time_iowait", _fmt_secs),
 ]
 
-_ALL_KEYS = {key for _, key, _ in _LINE1 + _LINE2}
+# IO r/w is a compound field handled specially in _make_lines
+_IO_KEYS = ("io_read_bytes", "io_write_bytes")
+
+_ALL_KEYS = {key for _, key, _ in _LINE1 + _LINE2} | set(_IO_KEYS)
 
 
 def _compute_ranges(data_dicts: list[dict[str, Any]]) -> dict[str, tuple[float, float]]:
@@ -195,7 +196,7 @@ class ResourceSpyApp(App):  # type: ignore[type-arg]
 
         stale = (time.monotonic() - last_msg) > 2.0
         dim = "#606060"
-        border_style = dim if stale else theme.BORDER
+        border_style = dim if stale else "#777777"
 
         # Collect (role, role_style, data_dict, modules) entries
         entries: list[tuple[str, str, dict[str, Any], str]] = []
@@ -215,11 +216,11 @@ class ResourceSpyApp(App):  # type: ignore[type-arg]
 
         # Build inner content: sections separated by Rules
         parts: list[RenderableType] = []
-        for i, (role, rs, d, mods) in enumerate(entries):
+        for i, (role, _rs, d, mods) in enumerate(entries):
             if i > 0:
                 title = Text(
                     f" {role}: {mods} " if mods else f" {role} ",
-                    style=dim if stale else rs,
+                    style=dim if stale else theme.WHITE,
                 )
                 parts.append(Rule(title=title, style=border_style))
             parts.extend(self._make_lines(d, stale, ranges))
@@ -271,14 +272,23 @@ class ResourceSpyApp(App):  # type: ignore[type-arg]
 
         # Line 2
         line2 = Text()
-        for i, (label, key, fmt) in enumerate(_LINE2):
+        for _i, (label, key, fmt) in enumerate(_LINE2):
             val = d.get(key, 0)
             lo, hi = ranges[key]
             val_style = dim if stale else _rel_style(val, lo, hi)
             line2.append(f"{label} ", style=label2_style)
             line2.append(fmt(val), style=val_style)
-            if i < len(_LINE2) - 1:
-                line2.append("  ")
+            line2.append("  ")
+
+        # IO r/w — compound field
+        io_r = d.get(_IO_KEYS[0], 0)
+        io_w = d.get(_IO_KEYS[1], 0)
+        lo_r, hi_r = ranges[_IO_KEYS[0]]
+        lo_w, hi_w = ranges[_IO_KEYS[1]]
+        line2.append("IO r/w ", style=label2_style)
+        line2.append(_fmt_io(io_r), style=dim if stale else _rel_style(io_r, lo_r, hi_r))
+        line2.append("/", style=label2_style)
+        line2.append(_fmt_io(io_w), style=dim if stale else _rel_style(io_w, lo_w, hi_w))
 
         return [line1, line2]
 
@@ -343,7 +353,7 @@ def _preview() -> None:
     from rich.console import Console
 
     data = _PREVIEW_DATA
-    border_style = theme.BORDER
+    border_style = "#555555"
 
     entries: list[tuple[str, str, dict[str, Any], str]] = []
     entries.append(("coordinator", theme.BRIGHT_CYAN, data["coordinator"], ""))
