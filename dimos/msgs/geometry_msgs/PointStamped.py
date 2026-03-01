@@ -20,11 +20,10 @@ from typing import TYPE_CHECKING, BinaryIO
 if TYPE_CHECKING:
     from rerun._baseclasses import Archetype
 
-    from dimos.msgs.geometry_msgs.Vector3 import VectorConvertable
+from dimos_lcm.geometry_msgs import Point as LCMPoint
+from dimos_lcm.geometry_msgs import PointStamped as LCMPointStamped
 
-from dimos_lcm.geometry_msgs import Point as LCMPoint, PointStamped as LCMPointStamped
-from plum import dispatch
-
+from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.types.timestamped import Timestamped
 
 
@@ -61,40 +60,17 @@ class PointStamped(Point, Timestamped):
     ts: float
     frame_id: str
 
-    @dispatch
-    def __init__(self, ts: float = 0.0, frame_id: str = "", **kwargs) -> None:  # type: ignore[no-untyped-def]
-        self.frame_id = frame_id
-        self.ts = ts if ts != 0 else time.time()
-        super().__init__(**kwargs)
-
-    @dispatch  # type: ignore[no-redef]
     def __init__(
         self,
-        x: int | float,
-        y: int | float,
-        z: int | float,
+        x: float = 0.0,
+        y: float = 0.0,
+        z: float = 0.0,
         ts: float = 0.0,
         frame_id: str = "",
     ) -> None:
-        """Positional construction: PointStamped(x, y, z, ts=..., frame_id=...)"""
         self.frame_id = frame_id
         self.ts = ts if ts != 0 else time.time()
         super().__init__(float(x), float(y), float(z))
-
-    @dispatch  # type: ignore[no-redef]
-    def __init__(
-        self,
-        position: VectorConvertable,
-        ts: float = 0.0,
-        frame_id: str = "",
-    ) -> None:
-        """Construction from sequence/Vector3: PointStamped([1,2,3]) or PointStamped(Vector3(...))"""
-        self.frame_id = frame_id
-        self.ts = ts if ts != 0 else time.time()
-        if hasattr(position, "x"):
-            super().__init__(float(position.x), float(position.y), float(position.z))
-        else:
-            super().__init__(float(position[0]), float(position[1]), float(position[2]))
 
     # -- LCM encode / decode --
 
