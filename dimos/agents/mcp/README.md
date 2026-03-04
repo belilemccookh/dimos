@@ -56,7 +56,7 @@ Set your API keys (first time only):
 
 ```bash
 echo "ANTHROPIC_API_KEY=<YOUR_KEY>" >> ~/.openclaw/.env
-echo "OPENCLAW_GATEWAY_TOKEN=<YOUR_TOKEN>" >> ~/.openclaw/.env
+echo "OPENCLAW_GATEWAY_TOKEN=<YOUR_TOKEN>" >> ~/.openclaw/.env  # can be any string, e.g. "test1"
 ```
 
 Start the gateway:
@@ -66,7 +66,7 @@ cd dimos/web/plugin_openclaw
 pnpm openclaw gateway run --port 18789 --verbose
 ```
 
-You should see `dimos: discovered 13 tool(s)` confirming the plugin loaded.
+You should see `dimos: discovered <N> tool(s)` confirming the plugin loaded.
 
 ## Terminal 3 — Send commands
 

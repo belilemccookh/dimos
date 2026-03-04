@@ -175,10 +175,10 @@ async function callTool(
       content
         .filter((c) => c.type === "text")
         .map((c) => c.text)
-        .join("\n") || "OK"
+        .join("\n") || "No content returned"
     );
   }
-  return JSON.stringify(content) || "OK";
+  return content != null ? JSON.stringify(content) : "No content returned";
 }
 
 export default {
