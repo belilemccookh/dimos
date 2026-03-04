@@ -20,7 +20,6 @@ from collections.abc import Callable
 from dataclasses import field
 from functools import lru_cache
 from typing import (
-    TYPE_CHECKING,
     Any,
     Literal,
     Protocol,
@@ -31,6 +30,8 @@ from typing import (
 )
 
 from reactivex.disposable import Disposable
+from rerun._baseclasses import Archetype
+from rerun.blueprint import Blueprint
 from toolz import pipe  # type: ignore[import-untyped]
 import typer
 
@@ -38,6 +39,7 @@ from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.protocol.pubsub.patterns import Glob, pattern_matches
+from dimos.protocol.pubsub.spec import SubscribeAllCapable
 from dimos.utils.logging_config import setup_logger
 
 RERUN_GRPC_PORT = 9876
@@ -88,12 +90,6 @@ RERUN_WEB_PORT = 9090
 
 logger = setup_logger()
 
-if TYPE_CHECKING:
-    from rerun._baseclasses import Archetype
-    from rerun.blueprint import Blueprint
-
-    from dimos.protocol.pubsub.spec import SubscribeAllCapable
-
 BlueprintFactory: TypeAlias = Callable[[], "Blueprint"]
 
 # to_rerun() can return a single archetype or a list of (entity_path, archetype) tuples
@@ -103,8 +99,6 @@ RerunData: TypeAlias = "Archetype | RerunMulti"
 
 def is_rerun_multi(data: Any) -> TypeGuard[RerunMulti]:
     """Check if data is a list of (entity_path, archetype) tuples."""
-    from rerun._baseclasses import Archetype
-
     return (
         isinstance(data, list)
         and bool(data)
@@ -191,8 +185,6 @@ class RerunBridgeModule(Module[Config]):
         Chains matching overrides from config, ending with final_convert
         which handles .to_rerun() or passes through Archetypes.
         """
-        from rerun._baseclasses import Archetype
-
         # find all matching converters for this entity path
         matches = [
             fn
