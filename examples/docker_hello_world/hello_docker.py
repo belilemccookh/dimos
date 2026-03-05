@@ -106,6 +106,11 @@ class PromptModule(Module):
         super().start()
         self.greeting.subscribe(self._on_greeting)
 
+    @rpc
+    def send(self, text: str) -> None:
+        """Publish a prompt message onto the stream."""
+        self.prompt.publish(text)
+
     def _on_greeting(self, text: str) -> None:
         print(f"[PromptModule] Received: {text}")
 
@@ -130,7 +135,7 @@ if __name__ == "__main__":
     print(docker_mod.greet("World"))
 
     # Test stream
-    prompt_mod.prompt.publish("stream test")
+    prompt_mod.send("stream test")
     time.sleep(2)
 
     coordinator.stop()

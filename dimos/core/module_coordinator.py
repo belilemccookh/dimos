@@ -76,33 +76,14 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
 
         self._client.close_all()  # type: ignore[union-attr]
 
-    def _deploy_docker(self, module_class: type[Module], *args: Any, **kwargs: Any) -> DockerModule:
-        from contextlib import suppress
-
-        logger.info("Deploying module in Docker.", module=module_class.__name__)
-        dm = DockerModule(module_class, *args, **kwargs)
-        try:
-            # why are docker modules started here? shouldn't they be started in start_all_modules?
-            # this is a bigger design problem we have with how blueprints, ModuleCoordinator, and WorkerManager are leaky abstractions with imperfect boundaries
-            # the Stream/RPC wiring (in blueprints) happens after deploy but before start. For docker modules, wiring needs the container's LCM transport to be reachable — which requires the container to be running.
-            # self.rpc.call_sync() send an RPC call to the container during wiring, the container must be running to handle that
-            # if we defer start() to start_all_modules, the container won't be up yet when _connect_streams and _connect_rpc_methods try to wire things
-            dm.start()
-        except Exception:
-            with suppress(Exception):
-                dm.stop()
-            raise
-        return dm
-
     def deploy(self, module_class: type[ModuleT], *args, **kwargs) -> ModuleProxy:  # type: ignore[no-untyped-def]
         if not self._client:
             raise ValueError("Trying to dimos.deploy before the client has started")
-
-        if is_docker_module(module_class):
-            module = self._deploy_docker(module_class, *args, **kwargs)  # type: ignore[assignment]
-        else:
-            module = self._client.deploy(module_class, *args, **kwargs)  # type: ignore[union-attr, attr-defined, assignment]
-
+        module = (
+            DockerModule(module_class, *args, **kwargs)  # type: ignore[assignment]
+            if is_docker_module(module_class)
+            else self._client.deploy(module_class, *args, **kwargs)  # type: ignore[union-attr, attr-defined, assignment]
+        )
         self._deployed_modules[module_class] = module  # type: ignore[assignment]
         return module  # type: ignore[return-value]
 
@@ -112,49 +93,38 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         if not self._client:
             raise ValueError("Not started")
 
-        # Separate docker modules from regular modules
-        docker_specs: list[tuple[type[ModuleT], tuple[Any, ...], dict[str, Any]]] = []
-        worker_specs: list[tuple[type[ModuleT], tuple[Any, ...], dict[str, Any]]] = []
-        spec_indices: list[tuple[str, int]] = []  # ("docker"|"worker", index_in_sublist)
+        docker_specs = [
+            (module_class, args, kwargs) for module_class, args, kwargs in module_specs if is_docker_module(module_class)
+        ]
+        worker_specs = [
+            (module_class, args, kwargs) for module_class, args, kwargs in module_specs if not is_docker_module(module_class)
+        ]
 
-        for spec in module_specs:
-            module_class = spec[0]
-            if is_docker_module(module_class):
-                spec_indices.append(("docker", len(docker_specs)))
-                docker_specs.append(spec)
-            else:
-                spec_indices.append(("worker", len(worker_specs)))
-                worker_specs.append(spec)
-
-        # Deploy worker modules in parallel via WorkerManager
         worker_results = self._client.deploy_parallel(worker_specs) if worker_specs else []
 
-        # Deploy docker modules in parallel (each starts its own container)
+        docker_results: list[Any] = []
         if docker_specs:
             with ThreadPoolExecutor(max_workers=len(docker_specs)) as executor:
-                futures = [
-                    executor.submit(self._deploy_docker, module_class, *args, **kwargs)
-                    for module_class, args, kwargs in docker_specs
-                ]
-                docker_results: list[Any] = [f.result() for f in futures]
-        else:
-            docker_results: list[Any] = []
+                docker_results = list(
+                    executor.map(
+                        lambda spec: DockerModule(spec[0], *spec[1], **spec[2]), docker_specs
+                    )
+                )
 
-        # Reassemble results in original order
-        results: list[Any] = []
-        for kind, idx in spec_indices:
-            if kind == "docker":
-                results.append(docker_results[idx])
-            else:
-                results.append(worker_results[idx])
+        # Reassemble in original order
+        worker_iter = iter(worker_results)
+        docker_iter = iter(docker_results)
+        results: list[Any] = [
+            next(docker_iter) if is_docker_module(module_class) else next(worker_iter)
+            for module_class, _, _ in module_specs
+        ]
 
         for (module_class, _, _), module in zip(module_specs, results, strict=True):
-            self._deployed_modules[module_class] = module
+            self._deployed_modules[module_class] = module  # type: ignore[assignment]
         return results  # type: ignore[return-value]
 
     def start_all_modules(self) -> None:
-        # Docker modules are already started during deploy, (see their deploy as to why this is)
-        modules = [m for cls, m in self._deployed_modules.items() if not is_docker_module(cls)]
+        modules = list(self._deployed_modules.values())
         if isinstance(self._client, WorkerManager):
             with ThreadPoolExecutor(max_workers=max(len(modules), 1)) as executor:
                 list(executor.map(lambda m: m.start(), modules))
@@ -162,10 +132,9 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
             for module in modules:
                 module.start()
 
-        module_list = list(self._deployed_modules.values())
         for module in modules:
             if hasattr(module, "on_system_modules"):
-                module.on_system_modules(module_list)
+                module.on_system_modules(modules)
 
     def get_instance(self, module: type[ModuleT]) -> ModuleProxy:
         return self._deployed_modules.get(module)  # type: ignore[return-value, no-any-return]

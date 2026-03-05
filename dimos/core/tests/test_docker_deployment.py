@@ -94,35 +94,31 @@ class TestModuleCoordinatorDockerRouting:
 
         # Should NOT go through worker manager
         mock_worker_mgr.deploy.assert_not_called()
-        # Should create a DockerModule and start it
+        # Should construct a DockerModule (container launch happens inside __init__)
         mock_docker_module_cls.assert_called_once_with(FakeDockerModule)
-        mock_dm.start.assert_called_once()
+        # start() is NOT called during deploy — it's called in start_all_modules
+        mock_dm.start.assert_not_called()
         assert result is mock_dm
-        # Should be tracked
         assert coordinator.get_instance(FakeDockerModule) is mock_dm
 
         coordinator.stop()
 
     @patch("dimos.core.module_coordinator.DockerModule")
     @patch("dimos.core.module_coordinator.WorkerManager")
-    def test_deploy_docker_cleans_up_on_start_failure(
+    def test_deploy_docker_propagates_constructor_failure(
         self, mock_worker_manager_cls, mock_docker_module_cls
     ):
         mock_worker_mgr = MagicMock()
         mock_worker_manager_cls.return_value = mock_worker_mgr
 
-        mock_dm = MagicMock()
-        mock_dm.start.side_effect = RuntimeError("start failed")
-        mock_docker_module_cls.return_value = mock_dm
+        # Container launch fails inside __init__; DockerModule handles its own cleanup
+        mock_docker_module_cls.side_effect = RuntimeError("launch failed")
 
         coordinator = ModuleCoordinator()
         coordinator.start()
 
-        with pytest.raises(RuntimeError, match="start failed"):
+        with pytest.raises(RuntimeError, match="launch failed"):
             coordinator.deploy(FakeDockerModule)
-
-        # stop() called to clean up the failed container
-        mock_dm.stop.assert_called_once()
 
         coordinator.stop()
 
@@ -170,7 +166,8 @@ class TestModuleCoordinatorDockerRouting:
         mock_worker_mgr.deploy_parallel.assert_called_once_with([(FakeRegularModule, (), {})])
         # Docker module gets its own DockerModule
         mock_docker_module_cls.assert_called_once_with(FakeDockerModule)
-        mock_dm.start.assert_called_once()
+        # start() is NOT called during deploy — it's called in start_all_modules
+        mock_dm.start.assert_not_called()
 
         # Results are in original order
         assert results[0] is regular_proxy
