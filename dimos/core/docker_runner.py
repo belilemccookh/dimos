@@ -221,8 +221,17 @@ class DockerModule(ModuleProxy):
         # Build image, launch container, wait for RPC server — mirrors worker Module.__init__
         try:
             if not image_exists(config):
-                logger.info(f"Building {config.docker_image}")
-                build_image(config)
+                if config.docker_file is not None:
+                    logger.info(f"Building {config.docker_image}")
+                    build_image(config)
+                else:
+                    logger.info(f"Pulling {config.docker_image}")
+                    r = _run([_docker_bin(config), "pull", config.docker_image], timeout=DOCKER_RUN_TIMEOUT)
+                    if r.returncode != 0:
+                        raise RuntimeError(
+                            f"Failed to pull image '{config.docker_image}'.\n"
+                            f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
+                        )
 
             reconnect = False
             if _is_container_running(config, self._container_name):
