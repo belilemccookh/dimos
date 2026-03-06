@@ -56,6 +56,9 @@ class HelloDockerConfig(DockerModuleConfig):
     docker_restart_policy: str = "no"
     docker_env: dict[str, str] = field(default_factory=lambda: {"CI": "1"})
 
+    # Custom (non-docker) config field — passed to the container via JSON
+    greeting_prefix: str = "Hello"
+
 
 class HelloDockerModule(Module["HelloDockerConfig"]):
     """A trivial module that runs inside Docker and echoes greetings."""
@@ -88,7 +91,13 @@ class HelloDockerModule(Module["HelloDockerConfig"]):
     @rpc
     def greet(self, name: str) -> str:
         """RPC method that can be called directly."""
-        return self._cowsay(f"Hello, {name}!")
+        prefix = self.config.greeting_prefix
+        return self._cowsay(f"{prefix}, {name}!")
+
+    @rpc
+    def get_greeting_prefix(self) -> str:
+        """Return the config value to verify it was passed to the container."""
+        return self.config.greeting_prefix
 
 
 # ---------------------------------------------------------------------------
@@ -125,14 +134,19 @@ if __name__ == "__main__":
 
     coordinator = autoconnect(
         PromptModule.blueprint(),
-        HelloDockerModule.blueprint(),
+        HelloDockerModule.blueprint(greeting_prefix="Howdy"),
     ).build()
 
     # Get module proxies
     prompt_mod = coordinator.get_instance(PromptModule)
     docker_mod = coordinator.get_instance(HelloDockerModule)
 
-    # Test RPC
+    # Test that custom config was passed to the container
+    prefix = docker_mod.get_greeting_prefix()
+    assert prefix == "Howdy", f"Expected 'Howdy', got {prefix!r}"
+    print(f"Config passed to container: greeting_prefix={prefix!r}")
+
+    # Test RPC (should use the custom prefix)
     print(docker_mod.greet("World"))
 
     # Test stream
