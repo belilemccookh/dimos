@@ -37,11 +37,11 @@ class ConsumerModule(Module):
 
 
 # output_a connects (same name+type), output_b is disconnected (no consumer)
-combined = autoconnect(ProducerModule.blueprint(), ConsumerModule.blueprint())
+_combined = autoconnect(ProducerModule.blueprint(), ConsumerModule.blueprint())
 
 
 def test_render_without_disconnected() -> None:
-    dot = render(combined, ignored_streams=set(), ignored_modules=set(), show_disconnected=False)
+    dot = render(_combined, ignored_streams=set(), ignored_modules=set(), show_disconnected=False)
     # Connected channel should be present
     assert "output_a:MsgA" in dot
     # Disconnected output_b should NOT appear
@@ -49,7 +49,7 @@ def test_render_without_disconnected() -> None:
 
 
 def test_render_with_disconnected() -> None:
-    dot = render(combined, ignored_streams=set(), ignored_modules=set(), show_disconnected=True)
+    dot = render(_combined, ignored_streams=set(), ignored_modules=set(), show_disconnected=True)
     # Connected channel should be present
     assert "output_a:MsgA" in dot
     # Disconnected output_b SHOULD appear with dashed style
@@ -58,5 +58,5 @@ def test_render_with_disconnected() -> None:
 
 
 def test_disconnected_default_is_false() -> None:
-    dot = render(combined, ignored_streams=set(), ignored_modules=set())
+    dot = render(_combined, ignored_streams=set(), ignored_modules=set())
     assert "output_b:MsgB" not in dot

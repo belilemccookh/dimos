@@ -23,13 +23,12 @@ import tempfile
 import webbrowser
 
 
-def main(python_file: str, *, show_disconnected: bool = True) -> None:
-    """Import a Python file, find all Blueprint globals, render SVG diagrams, and open in browser."""
+def _build_html(python_file: str, *, show_disconnected: bool = True) -> str:
+    """Import a Python file, find all Blueprint globals, and return rendered HTML."""
     filepath = os.path.abspath(python_file)
     if not os.path.isfile(filepath):
         raise FileNotFoundError(filepath)
 
-    # Load the file as a module
     spec = importlib.util.spec_from_file_location("_render_target", filepath)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {filepath}")
@@ -39,7 +38,6 @@ def main(python_file: str, *, show_disconnected: bool = True) -> None:
     from dimos.core.blueprints import Blueprint
     from dimos.core.introspection.svg import to_svg
 
-    # Collect all Blueprint instances from module globals
     blueprints: list[tuple[str, Blueprint]] = []
     for name, obj in vars(mod).items():
         if name.startswith("_"):
@@ -59,7 +57,6 @@ def main(python_file: str, *, show_disconnected: bool = True) -> None:
             "                  apt install graphviz    (Debian/Ubuntu)"
         )
 
-    # Render each blueprint to SVG, embed in HTML
     sections = []
     for name, bp in blueprints:
         fd, svg_path = tempfile.mkstemp(suffix=".svg", prefix=f"dimos_{name}_")
@@ -70,7 +67,7 @@ def main(python_file: str, *, show_disconnected: bool = True) -> None:
         os.unlink(svg_path)
         sections.append(f'<h2>{name}</h2>\n<div class="diagram">{svg_content}</div>')
 
-    html = f"""\
+    return f"""\
 <!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -85,9 +82,29 @@ h2 {{ border-bottom: 1px solid #444; padding-bottom: 0.3em; }}
 {"".join(sections)}
 </body></html>"""
 
-    fd, path = tempfile.mkstemp(suffix=".html", prefix="dimos_blueprints_")
-    with os.fdopen(fd, "w") as f:
-        f.write(html)
 
-    print(f"Written to {path}")
-    webbrowser.open(f"file://{path}")
+def main(python_file: str, *, show_disconnected: bool = True, port: int = 0) -> None:
+    """Render Blueprint SVG diagrams and display them via a one-shot HTTP server."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    html = _build_html(python_file, show_disconnected=show_disconnected)
+    html_bytes = html.encode("utf-8")
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html_bytes)))
+            self.end_headers()
+            self.wfile.write(html_bytes)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    actual_port = server.server_address[1]
+    url = f"http://localhost:{actual_port}"
+    print(f"Serving at {url}  (will exit after first request)")
+    webbrowser.open(url)
+    server.handle_request()
+    print("Served. Exiting.")

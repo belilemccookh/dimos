@@ -51,6 +51,11 @@ DEFAULT_IGNORED_MODULES = {
     # "FoxgloveBridge",
 }
 
+# Modules only ignored when show_disconnected is False (compact view)
+_COMPACT_ONLY_IGNORED_MODULES = {
+    "WebsocketVisModule",
+}
+
 
 def render(
     blueprint_set: Blueprint,
@@ -82,7 +87,10 @@ def render(
     if ignored_streams is None:
         ignored_streams = DEFAULT_IGNORED_CONNECTIONS
     if ignored_modules is None:
-        ignored_modules = DEFAULT_IGNORED_MODULES
+        if show_disconnected:
+            ignored_modules = DEFAULT_IGNORED_MODULES - _COMPACT_ONLY_IGNORED_MODULES
+        else:
+            ignored_modules = DEFAULT_IGNORED_MODULES
 
     # Collect all outputs: (name, type) -> list of producer modules
     producers: dict[tuple[str, type], list[type[Module]]] = defaultdict(list)

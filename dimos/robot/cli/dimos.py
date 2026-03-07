@@ -210,11 +210,12 @@ def graph(
     no_disconnected: bool = typer.Option(
         False, "--no-disconnected", help="Hide disconnected streams"
     ),
+    port: int = typer.Option(0, "--port", help="HTTP server port (0 = random free port)"),
 ) -> None:
     """Render blueprint graphs from a Python file and open in browser."""
     from dimos.utils.cli.graph import main as graph_main
 
-    graph_main(python_file, show_disconnected=not no_disconnected)
+    graph_main(python_file, show_disconnected=not no_disconnected, port=port)
 
 
 @main.command(name="rerun-bridge")
