@@ -21,7 +21,7 @@ from dimos.mapping.voxels import voxel_mapper
 from dimos.navigation.frontier_exploration import wavefront_frontier_explorer
 
 _mapper = autoconnect(
-    voxel_mapper(voxel_size=0.9),
+    voxel_mapper(voxel_size=0.3),
     cost_mapper(),
     wavefront_frontier_explorer(),
 )
