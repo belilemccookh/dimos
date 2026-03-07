@@ -64,6 +64,7 @@ all_blueprints = {
     "unitree-g1-agentic": "dimos.robot.unitree.g1.legacy.blueprints.agentic.unitree_g1_agentic:unitree_g1_agentic",
     "unitree-g1-agentic-sim": "dimos.robot.unitree.g1.legacy.blueprints.agentic.unitree_g1_agentic_sim:unitree_g1_agentic_sim",
     "unitree-g1-basic": "dimos.robot.unitree.g1.legacy.blueprints.basic.unitree_g1_basic:unitree_g1_basic",
+    "unitree-g1-onboard": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_onboard:unitree_g1_onboard",
     "unitree-g1-basic-sim": "dimos.robot.unitree.g1.legacy.blueprints.basic.unitree_g1_basic_sim:unitree_g1_basic_sim",
     "unitree-g1-detection": "dimos.robot.unitree.g1.legacy.blueprints.perceptive.unitree_g1_detection:unitree_g1_detection",
     "unitree-g1-full": "dimos.robot.unitree.g1.legacy.blueprints.agentic.unitree_g1_full:unitree_g1_full",

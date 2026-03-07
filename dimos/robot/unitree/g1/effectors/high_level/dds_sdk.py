@@ -33,7 +33,9 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
 )
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
-from dimos.core import In, Module, ModuleConfig, rpc
+from dimos.core.core import rpc
+from dimos.core.module import Module, ModuleConfig
+from dimos.core.stream import In
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.msgs.geometry_msgs import Twist
 from dimos.robot.unitree.g1.effectors.high_level.high_level_spec import HighLevelG1Spec
