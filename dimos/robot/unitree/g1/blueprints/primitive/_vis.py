@@ -46,7 +46,7 @@ def _static_base_link(rr: Any) -> list[Any]:
     return [
         rr.Boxes3D(
             half_sizes=[0.2, 0.15, 0.75],
-            centers=[[0, 0, -0.75]],
+            centers=[[0, 0, 0.45]],
             colors=[(0, 255, 127)],
             fill_mode="MajorWireframe",
         ),
