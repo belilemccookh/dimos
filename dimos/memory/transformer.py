@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import logging
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
@@ -23,7 +24,10 @@ if TYPE_CHECKING:
     from dimos.memory.stream import Stream
     from dimos.memory.type import Observation
     from dimos.models.embedding.base import Embedding, EmbeddingModel
-    from dimos.models.vl.base import Captioner
+    from dimos.models.vl.base import Captioner, VlModel
+    from dimos.perception.detection.type import ImageDetections2D
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -35,6 +39,9 @@ class Transformer(ABC, Generic[T, R]):
     supports_backfill: bool = True
     supports_live: bool = True
     output_type: type | None = None
+
+    def __repr__(self) -> str:
+        return type(self).__name__
 
     @abstractmethod
     def process(self, source: Stream[T], target: Stream[R]) -> None:
@@ -86,6 +93,10 @@ class QualityWindowTransformer(Transformer[T, T]):
     def __init__(self, quality_fn: Callable[[T], float], window: float = 0.5) -> None:
         self._quality_fn = quality_fn
         self._window = window
+
+    def __repr__(self) -> str:
+        fn_name = getattr(self._quality_fn, "__name__", None) or repr(self._quality_fn)
+        return f"QualityWindowTransformer({fn_name}, window={self._window})"
         # Live state
         self._window_start: float | None = None
         self._best_obs: Observation[T] | None = None
@@ -168,6 +179,13 @@ class CaptionTransformer(Transformer[Any, str]):
         self.batch_size = batch_size
         self.output_type: type | None = str
 
+    def __repr__(self) -> str:
+        model_name = type(self.model).__name__
+        parts = [model_name]
+        if self.batch_size != 16:
+            parts.append(f"batch_size={self.batch_size}")
+        return f"CaptionTransformer({', '.join(parts)})"
+
     def process(self, source: Stream[Any], target: Stream[str]) -> None:
         for page in source.fetch_pages(batch_size=self.batch_size):
             images = [obs.data for obs in page]
@@ -197,6 +215,9 @@ class TextEmbeddingTransformer(Transformer[Any, "Embedding"]):
 
         self.model = model
         self.output_type: type | None = EmbeddingCls
+
+    def __repr__(self) -> str:
+        return f"TextEmbeddingTransformer({type(self.model).__name__})"
 
     def process(self, source: Stream[Any], target: Stream[Embedding]) -> None:
         for page in source.fetch_pages():
@@ -231,6 +252,9 @@ class EmbeddingTransformer(Transformer[Any, "Embedding"]):
         self.model = model
         self.output_type: type | None = EmbeddingCls
 
+    def __repr__(self) -> str:
+        return f"EmbeddingTransformer({type(self.model).__name__})"
+
     def process(self, source: Stream[Any], target: Stream[Embedding]) -> None:
         for page in source.fetch_pages():
             images = [obs.data for obs in page]
@@ -247,3 +271,57 @@ class EmbeddingTransformer(Transformer[Any, "Embedding"]):
         if isinstance(emb, list):
             emb = emb[0]
         target.append(emb, ts=obs.ts, pose=obs.pose, tags=obs.tags, parent_id=obs.id)
+
+
+class DetectionTransformer(Transformer[Any, "ImageDetections2D"]):
+    """Runs VLM object detection on images, producing ImageDetections2D.
+
+    Strips image references from detections before storage to avoid
+    duplicating image data. Use project_to(image_stream) to recover
+    source images via lineage.
+    """
+
+    supports_backfill = True
+    supports_live = True
+
+    def __init__(self, model: VlModel, query: str, *, skip_empty: bool = True) -> None:
+        from dimos.perception.detection.type import ImageDetections2D as IDet2D
+
+        self.model = model
+        self.query = query
+        self.skip_empty = skip_empty
+        self.output_type: type | None = IDet2D
+
+    def __repr__(self) -> str:
+        model_name = type(self.model).__name__
+        parts = [f"{model_name}, {self.query!r}"]
+        if not self.skip_empty:
+            parts.append("skip_empty=False")
+        return f"DetectionTransformer({', '.join(parts)})"
+
+    def process(self, source: Stream[Any], target: Stream[ImageDetections2D]) -> None:
+        for page in source.fetch_pages():
+            for obs in page:
+                self._detect_and_append(obs, target)
+
+    def on_append(self, obs: Observation[Any], target: Stream[ImageDetections2D]) -> None:
+        self._detect_and_append(obs, target)
+
+    def _detect_and_append(self, obs: Observation[Any], target: Stream[ImageDetections2D]) -> None:
+        try:
+            detections = self.model.query_detections(obs.data, self.query)
+        except Exception:
+            logger.warning("Detection failed for obs %s, skipping", obs.id, exc_info=True)
+            return
+
+        count = len(detections)
+        if count == 0 and self.skip_empty:
+            return
+
+        # Strip image refs to avoid duplicating image data in storage
+        detections.image = None
+        for det in detections.detections:
+            det.image = None
+
+        tags = {**(obs.tags or {}), "query": self.query, "count": count}
+        target.append(detections, ts=obs.ts, pose=obs.pose, tags=tags, parent_id=obs.id)

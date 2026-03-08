@@ -409,7 +409,6 @@ class SqliteStreamBackend:
         pose_cols = _decompose_pose(pose)
         tags_json = _serialize_tags(tags)
 
-        print("APPEND", payload)
         # Encode payload before touching the DB so a codec error can't leave
         # a metadata row without a matching payload row.
         payload_blob = self._codec.encode(payload)

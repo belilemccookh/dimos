@@ -655,6 +655,7 @@ class _CollectorStream(Stream[R]):
         obs: Observation[R] = Observation(
             id=self._next_id,
             ts=ts if ts is not None else time.time(),
+            pose=pose,
             tags=tags or {},
             parent_id=parent_id,
             _data=payload,

@@ -203,7 +203,7 @@ def rich_text(obj: Any) -> Text:
         t.append("(", style="dim")
         t.append_text(rich_text(obj._source))
         t.append(" -> ", style="dim")
-        t.append(type(xf).__name__, style="magenta")
+        t.append(repr(xf), style="magenta")
         if obj._live:
             t.append(", ", style="dim")
             t.append("live=True", style="yellow")

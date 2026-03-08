@@ -168,7 +168,7 @@ class TestStreamRepr:
         print(t)
         assert (
             repr(t)
-            == 'TransformStream[Embedding](Stream[int]("images") -> EmbeddingTransformer, live=True)'
+            == 'TransformStream[Embedding](Stream[int]("images") -> EmbeddingTransformer(MagicMock), live=True)'
         )
 
     def test_embedding_stream_from_source(self, session) -> None:

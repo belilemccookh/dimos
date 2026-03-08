@@ -45,12 +45,13 @@ class ImageDetections(Generic[T], TableStr):
     def ts(self) -> float:
         return self.image.ts
 
-    def __init__(self, image: Image, detections: list[T] | None = None) -> None:
+    def __init__(self, image: Image | None = None, detections: list[T] | None = None) -> None:
         self.image = image
         self.detections = detections or []
-        for det in self.detections:
-            if not det.ts:
-                det.ts = image.ts
+        if image is not None:
+            for det in self.detections:
+                if not det.ts:
+                    det.ts = image.ts
 
     def __len__(self) -> int:
         return len(self.detections)

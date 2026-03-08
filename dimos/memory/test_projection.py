@@ -19,6 +19,7 @@ import pytest
 from dimos.memory.impl.sqlite import SqliteSession, SqliteStore
 from dimos.memory.transformer import (
     CaptionTransformer,
+    DetectionTransformer,
     EmbeddingTransformer,
     QualityWindowTransformer,
     TextEmbeddingTransformer,
@@ -26,6 +27,7 @@ from dimos.memory.transformer import (
 from dimos.models.embedding.base import Embedding
 from dimos.models.embedding.clip import CLIPModel
 from dimos.models.vl.florence import CaptionDetail, Florence2Model
+from dimos.models.vl.moondream import MoondreamVlModel
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.data import get_data
@@ -84,8 +86,6 @@ def test_make_embedding(session, lidar_stream, image_stream, clip):
 
 @pytest.mark.tool
 def test_make_caption(session, clip):
-    from dimos.models.vl.florence import CaptionDetail, Florence2Model
-
     print("")
 
     session.streams.captions.delete()
@@ -125,33 +125,48 @@ def test_query_embeddings(session, clip):
     embeddings = session.streams.clip_embeddings.search_embedding("supermarket", k=5, model=clip)
 
     print(embeddings)
+
+    # we can create captions on demand
     florence = Florence2Model(detail=CaptionDetail.NORMAL)
     florence.start()
 
-    # ~600 results:
-    # images = session.streams.sharp_images.near(embeddings, radius=1.0).fetch()
-    # caption_search = images.transform(
-    #     CaptionTransformer(florence)
-    # )
-
-    # 3 results
-    caption_search = session.streams.sharp_images.near(embeddings).transform(
-        CaptionTransformer(florence)
+    caption_query = (
+        session.streams.sharp_images.near(embeddings)
+        .limit(5)
+        .transform(CaptionTransformer(florence))
     )
+    florence.stop()
 
-    print(caption_search)
+    # we could have also searched in the db (if precomputed)
+    # caption_query = session.streams.captions.near(embeddings)
 
-    captions = caption_search.fetch()
+    print(caption_query)
+
+    captions = caption_query.fetch()
 
     print(captions.summary())
-    florence.stop()
 
     for obs in captions:
         print(obs.id, obs.data)
 
-    images = session.streams.color_image.near(embeddings, radius=1.0).fetch()
+    # we can also find all images ever captured near these embeddings (600+ frames)
+    images = session.streams.sharp_images.near(embeddings).fetch()
 
     print(images)
+
+    moondream = MoondreamVlModel()
+    moondream.start()
+
+    bottles = session.streams.sharp_images.near(embeddings, radius=1.0).transform(
+        DetectionTransformer(moondream, query="bottle")
+    )
+
+    print(bottles)
+
+    for bottle in bottles.fetch():
+        print(bottle.data)
+
+    moondream.stop()
 
 
 def test_count_comparison(session, clip):
@@ -204,4 +219,11 @@ def test_search_embeddings(session, clip):
     results = project.fetch()
     print(results)
     results = project.fetch()
+    print(results)
+    results = project.fetch()
+    print(results)
+    results = project.fetch()
+    print(results)
+    print(results)
+    print(results)
     print(results)
