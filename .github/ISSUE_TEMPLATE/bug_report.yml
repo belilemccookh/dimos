@@ -1,6 +1,6 @@
 name: Bug Report
 description: Report a bug in DimOS
-labels: ["bug"]
+title: "[Bug]: "
 body:
   - type: dropdown
     id: robot-model
