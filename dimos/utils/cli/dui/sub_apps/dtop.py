@@ -44,25 +44,25 @@ if TYPE_CHECKING:
 class DtopSubApp(SubApp):
     TITLE = "dtop"
 
-    DEFAULT_CSS = f"""
-    DtopSubApp {{
+    DEFAULT_CSS = """
+    DtopSubApp {
         layout: vertical;
         height: 1fr;
-        background: {theme.BACKGROUND};
-    }}
-    DtopSubApp VerticalScroll {{
+        background: $dui-bg;
+    }
+    DtopSubApp VerticalScroll {
         height: 1fr;
         scrollbar-size: 0 0;
-    }}
-    DtopSubApp VerticalScroll.waiting {{
+    }
+    DtopSubApp VerticalScroll.waiting {
         align: center middle;
-    }}
-    DtopSubApp .waiting #dtop-panels {{
+    }
+    DtopSubApp .waiting #dtop-panels {
         width: auto;
-    }}
-    DtopSubApp #dtop-panels {{
+    }
+    DtopSubApp #dtop-panels {
         background: transparent;
-    }}
+    }
     """
 
     def __init__(self) -> None:

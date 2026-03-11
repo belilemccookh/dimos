@@ -55,100 +55,101 @@ def _launch_log_plain_path() -> Path:
 class StatusSubApp(SubApp):
     TITLE = "status"
 
-    DEFAULT_CSS = f"""
-    StatusSubApp {{
+    DEFAULT_CSS = """
+    StatusSubApp {
         layout: vertical;
         height: 1fr;
-        background: {theme.BACKGROUND};
-    }}
-    StatusSubApp .subapp-header {{
+        background: $dui-bg;
+    }
+    StatusSubApp .subapp-header {
         width: 100%;
         height: auto;
         color: #ff8800;
         padding: 1 2;
         text-style: bold;
-    }}
-    StatusSubApp RichLog {{
+    }
+    StatusSubApp RichLog {
         height: 1fr;
-        background: {theme.BACKGROUND};
-        border: solid {theme.DIM};
-        scrollbar-size: 0 0;
-    }}
-    StatusSubApp #idle-container {{
+        background: $dui-bg;
+        border: solid $dui-dim;
+        scrollbar-size-vertical: 0;
+        scrollbar-size-horizontal: 1;
+    }
+    StatusSubApp #idle-container {
         height: 1fr;
         align: center middle;
-    }}
-    StatusSubApp #idle-panel {{
+    }
+    StatusSubApp #idle-panel {
         width: auto;
         background: transparent;
-    }}
-    StatusSubApp #run-controls {{
+    }
+    StatusSubApp #run-controls {
         height: auto;
         padding: 0 1;
-        background: {theme.BACKGROUND};
-    }}
-    StatusSubApp #run-controls Button {{
+        background: $dui-bg;
+    }
+    StatusSubApp #run-controls Button {
         margin: 0 1 0 0;
         min-width: 12;
         background: transparent;
-        border: solid {theme.DIM};
-        color: {theme.ACCENT};
-    }}
-    StatusSubApp .status-bar {{
+        border: solid $dui-dim;
+        color: $dui-text;
+    }
+    StatusSubApp .status-bar {
         height: 1;
         dock: bottom;
-        background: #1a2020;
-        color: {theme.DIM};
+        background: $dui-hint-bg;
+        color: $dui-dim;
         padding: 0 1;
-    }}
-    StatusSubApp #btn-stop {{
+    }
+    StatusSubApp #btn-stop {
         border: solid #882222;
         color: #cc4444;
-    }}
-    StatusSubApp #btn-stop:hover {{
+    }
+    StatusSubApp #btn-stop:hover {
         border: solid #cc4444;
-    }}
-    StatusSubApp #btn-stop:focus {{
+    }
+    StatusSubApp #btn-stop:focus {
         background: #882222;
         color: #ffffff;
         border: solid #cc4444;
-    }}
-    StatusSubApp #btn-sudo-kill {{
+    }
+    StatusSubApp #btn-sudo-kill {
         border: solid #882222;
         color: #ff4444;
-    }}
-    StatusSubApp #btn-sudo-kill:hover {{
+    }
+    StatusSubApp #btn-sudo-kill:hover {
         border: solid #ff4444;
-    }}
-    StatusSubApp #btn-sudo-kill:focus {{
+    }
+    StatusSubApp #btn-sudo-kill:focus {
         background: #882222;
         color: #ffffff;
         border: solid #ff4444;
-    }}
-    StatusSubApp #btn-restart {{
+    }
+    StatusSubApp #btn-restart {
         border: solid #886600;
         color: #ccaa00;
-    }}
-    StatusSubApp #btn-restart:hover {{
+    }
+    StatusSubApp #btn-restart:hover {
         border: solid #ccaa00;
-    }}
-    StatusSubApp #btn-restart:focus {{
+    }
+    StatusSubApp #btn-restart:focus {
         background: #886600;
         color: #ffffff;
         border: solid #ccaa00;
-    }}
-    StatusSubApp #btn-open-log {{
+    }
+    StatusSubApp #btn-open-log {
         border: solid #445566;
         color: #8899aa;
-    }}
-    StatusSubApp #btn-open-log:hover {{
+    }
+    StatusSubApp #btn-open-log:hover {
         border: solid #8899aa;
-    }}
-    StatusSubApp #btn-open-log:focus {{
+    }
+    StatusSubApp #btn-open-log:focus {
         background: #445566;
         color: #ffffff;
         border: solid #8899aa;
-    }}
+    }
     """
 
     def __init__(self) -> None:
@@ -175,7 +176,7 @@ class StatusSubApp(SubApp):
         yield Static("Blueprint Status", classes="subapp-header")
         with VerticalScroll(id="idle-container"):
             yield Static(self._idle_panel(), id="idle-panel")
-        yield RichLog(id="runner-log", markup=True, wrap=True, auto_scroll=True)
+        yield RichLog(id="runner-log", markup=True, wrap=False, auto_scroll=True, min_width=600)
         with Horizontal(id="run-controls"):
             yield Button("Stop", id="btn-stop", variant="error")
             yield Button("Force Kill (sudo)", id="btn-sudo-kill")
@@ -568,16 +569,30 @@ class StatusSubApp(SubApp):
         except Exception:
             pass
 
+    def _get_clicked_line_number(self, event: Any) -> int:
+        """Map a click event to a 1-based line number in the log file."""
+        try:
+            log_widget = self.query_one("#runner-log", RichLog)
+            # Convert screen_y to position relative to the RichLog
+            local_y = event.screen_y - log_widget.region.y
+            # Add scroll offset to get the visual line index
+            line_idx = int(log_widget.scroll_y) + local_y
+            # 1-based for editors
+            return max(1, line_idx + 1)
+        except Exception:
+            return 1
+
     def _handle_double_click(self, event: Any) -> None:
         """Open the plain (no ANSI) launch log in the user's editor."""
+        lineno = self._get_clicked_line_number(event)
         log_path = _launch_log_plain_path()
         if log_path.exists():
-            self._open_source_file(str(log_path), 0)
+            self._open_source_file(str(log_path), lineno)
         else:
             # Fall back to colored version
             log_path = _launch_log_path()
             if log_path.exists():
-                self._open_source_file(str(log_path), 0)
+                self._open_source_file(str(log_path), lineno)
             else:
                 self.app.notify("No launch log found", severity="warning")
 
@@ -841,6 +856,14 @@ class StatusSubApp(SubApp):
                         f_plain.write(_ANSI_RE.sub("", line))
                         f_plain.flush()
                     proc.wait()
+
+                # Copy plain log into the run's log directory for archival
+                try:
+                    from dimos.utils.cli.dui.sub_apps.launcher import _copy_plain_log_to_run_dir
+
+                    _copy_plain_log_to_run_dir(plain_file)
+                except Exception:
+                    pass
             except Exception as e:
                 self.app.call_from_thread(log_widget.write, f"[red]Restart error: {e}[/red]")
 

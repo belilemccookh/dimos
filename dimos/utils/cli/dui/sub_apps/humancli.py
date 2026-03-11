@@ -44,14 +44,16 @@ class _ConnState(Enum):
     ERROR = auto()
 
 
-_STATUS_STYLE: dict[_ConnState, tuple[str, str]] = {
-    _ConnState.DISCONNECTED: ("disconnected", theme.DIM),
-    _ConnState.CONNECTING: ("connecting…", theme.YELLOW),
-    _ConnState.WAITING_FOR_AGENT: ("waiting for agent…", theme.YELLOW),
-    _ConnState.CONNECTED: ("connected", theme.GREEN),
-    _ConnState.NO_AGENT: ("no agent — blueprint may not include one", theme.DIM),
-    _ConnState.ERROR: ("error", theme.RED),
-}
+def _status_style(state: _ConnState) -> tuple[str, str]:
+    """Return (label, color) for a connection state, reading theme at call time."""
+    return {
+        _ConnState.DISCONNECTED: ("disconnected", theme.DIM),
+        _ConnState.CONNECTING: ("connecting…", theme.YELLOW),
+        _ConnState.WAITING_FOR_AGENT: ("waiting for agent…", theme.YELLOW),
+        _ConnState.CONNECTED: ("connected", theme.GREEN),
+        _ConnState.NO_AGENT: ("no agent — blueprint may not include one", theme.DIM),
+        _ConnState.ERROR: ("error", theme.RED),
+    }[state]
 
 # Seconds to wait for an agent response before showing "no agent"
 _AGENT_DETECT_TIMEOUT = 8.0
@@ -123,29 +125,29 @@ class _ThinkingIndicator:
 class HumanCLISubApp(SubApp):
     TITLE = "chat"
 
-    DEFAULT_CSS = f"""
-    HumanCLISubApp {{
+    DEFAULT_CSS = """
+    HumanCLISubApp {
         layout: vertical;
-        background: {theme.BACKGROUND};
-    }}
-    HumanCLISubApp #hcli-status-bar {{
+        background: $dui-bg;
+    }
+    HumanCLISubApp #hcli-status-bar {
         height: 1;
         dock: top;
         padding: 0 1;
-        background: {theme.BG};
-        color: {theme.DIM};
-    }}
-    HumanCLISubApp #hcli-chat {{
+        background: $dui-bg;
+        color: $dui-dim;
+    }
+    HumanCLISubApp #hcli-chat {
         height: 1fr;
-    }}
-    HumanCLISubApp RichLog {{
+    }
+    HumanCLISubApp RichLog {
         height: 1fr;
         scrollbar-size: 0 0;
-        border: solid {theme.DIM};
-    }}
-    HumanCLISubApp Input {{
+        border: solid $dui-dim;
+    }
+    HumanCLISubApp Input {
         dock: bottom;
-    }}
+    }
     """
 
     def __init__(self) -> None:
@@ -191,7 +193,7 @@ class HumanCLISubApp(SubApp):
     def _set_conn_state(self, state: _ConnState, error: str = "") -> None:
         self._conn_state = state
         self._conn_error = error
-        label, color = _STATUS_STYLE[state]
+        label, color = _status_style(state)
         if state == _ConnState.ERROR and error:
             label = f"error: {error}"
         try:

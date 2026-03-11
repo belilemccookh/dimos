@@ -27,6 +27,7 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.widgets import RichLog, Static
 
+from dimos.utils.cli import theme
 from dimos.utils.cli.dui.sub_apps import get_sub_apps
 
 if TYPE_CHECKING:
@@ -60,6 +61,13 @@ class DUIApp(App[None]):
 
     def __init__(self, *, debug: bool = False) -> None:
         super().__init__()
+        # Register all DimOS themes
+        for t in theme.get_textual_themes():
+            self.register_theme(t)
+        # Load saved theme from config
+        saved_theme = self._load_saved_theme()
+        theme.set_theme(saved_theme)
+        self.theme = f"dimos-{saved_theme}"
         self._debug = debug
         self._sub_app_classes = get_sub_apps()
         n = len(self._sub_app_classes)
@@ -84,6 +92,22 @@ class DUIApp(App[None]):
             f = open(log_path, "w")
             self._debug_log_path = str(log_path)
             self._debug_log_file = f
+
+    @staticmethod
+    def _load_saved_theme() -> str:
+        """Read the saved theme name from dio-config.json, falling back to default."""
+        import json
+        from pathlib import Path
+
+        try:
+            config_path = Path(sys.prefix) / "dio-config.json"
+            data = json.loads(config_path.read_text())
+            name = data.get("theme", theme.DEFAULT_THEME)
+            if name in theme.THEME_NAMES:
+                return name
+        except Exception:
+            pass
+        return theme.DEFAULT_THEME
 
     # ------------------------------------------------------------------
     # Debug log

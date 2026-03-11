@@ -35,12 +35,13 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 _VIEWER_OPTIONS = ["rerun", "rerun-web", "rerun-connect", "foxglove", "none"]
+_THEME_OPTIONS = theme.THEME_NAMES
 
 
 class _FormNavigationMixin:
     """Mixin that intercepts Up/Down to move focus between config fields."""
 
-    _FIELD_ORDER = ("cfg-viewer", "cfg-n-workers", "cfg-robot-ip", "cfg-dtop")
+    _FIELD_ORDER = ("cfg-theme", "cfg-viewer", "cfg-n-workers", "cfg-robot-ip", "cfg-dtop")
 
     def _navigate_field(self, delta: int) -> None:
         my_id = getattr(self, "id", None)
@@ -69,9 +70,10 @@ class CycleSelect(_FormNavigationMixin, Widget, can_focus=True):
     current_value: reactive[str] = reactive("")
 
     class Changed(Message):
-        def __init__(self, value: str) -> None:
+        def __init__(self, value: str, widget_id: str = "") -> None:
             super().__init__()
             self.value = value
+            self.widget_id = widget_id
 
     def __init__(self, options: list[str], value: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -89,7 +91,7 @@ class CycleSelect(_FormNavigationMixin, Widget, can_focus=True):
     def action_cycle(self, delta: int) -> None:
         self._index = (self._index + delta) % len(self._options)
         self.current_value = self._options[self._index]
-        self.post_message(self.Changed(self.current_value))
+        self.post_message(self.Changed(self.current_value, widget_id=self.id or ""))
 
     def action_nav(self, delta: int) -> None:
         self._navigate_field(delta)
@@ -108,6 +110,7 @@ class ConfigInput(_FormNavigationMixin, Input):
 
 
 _DEFAULTS: dict[str, object] = {
+    "theme": theme.DEFAULT_THEME,
     "viewer": "rerun",
     "n_workers": 2,
     "robot_ip": "",
@@ -146,62 +149,62 @@ def _save_config(values: dict[str, object]) -> None:
 class ConfigSubApp(SubApp):
     TITLE = "config"
 
-    DEFAULT_CSS = f"""
-    ConfigSubApp {{
+    DEFAULT_CSS = """
+    ConfigSubApp {
         layout: vertical;
         padding: 1 2;
-        background: {theme.BACKGROUND};
+        background: $dui-bg;
         overflow-y: auto;
-    }}
-    ConfigSubApp .subapp-header {{
-        color: #ff8800;
+    }
+    ConfigSubApp .subapp-header {
+        color: $dui-header;
         padding: 0;
         text-style: bold;
-    }}
-    ConfigSubApp Label {{
+    }
+    ConfigSubApp Label {
         margin-top: 1;
-        color: {theme.ACCENT};
-    }}
-    ConfigSubApp .field-label {{
-        color: {theme.CYAN};
+        color: $dui-text;
+    }
+    ConfigSubApp .field-label {
+        color: $dui-accent;
         margin-bottom: 0;
-    }}
-    ConfigSubApp Input, ConfigSubApp ConfigInput {{
+    }
+    ConfigSubApp Input, ConfigSubApp ConfigInput {
         width: 40;
-    }}
-    ConfigSubApp CycleSelect {{
+    }
+    ConfigSubApp CycleSelect {
         width: 40;
         height: 3;
-        background: {theme.BACKGROUND};
-        color: {theme.ACCENT};
-        border: solid {theme.DIM};
+        background: $dui-bg;
+        color: $dui-text;
+        border: solid $dui-dim;
         content-align: left middle;
-    }}
-    ConfigSubApp CycleSelect:focus {{
-        border: solid {theme.CYAN};
-        color: {theme.CYAN};
-    }}
-    ConfigSubApp .switch-row {{
+    }
+    ConfigSubApp CycleSelect:focus {
+        border: solid $dui-accent;
+        color: $dui-accent;
+    }
+    ConfigSubApp .switch-row {
         height: 3;
         margin-top: 1;
-    }}
-    ConfigSubApp .switch-row Label {{
+    }
+    ConfigSubApp .switch-row Label {
         margin-top: 0;
         padding: 1 0;
-    }}
-    ConfigSubApp .switch-state {{
-        color: {theme.DIM};
+    }
+    ConfigSubApp .switch-state {
+        color: $dui-dim;
         padding: 1 1;
         width: 6;
-    }}
-    ConfigSubApp .switch-state.--on {{
-        color: {theme.CYAN};
-    }}
-    ConfigSubApp #cfg-dirty-notice {{
+    }
+    ConfigSubApp .switch-state.--on {
+        color: $dui-accent;
+    }
+    ConfigSubApp #cfg-dirty-notice {
         margin-top: 1;
-        color: {theme.YELLOW};
+        color: $dui-yellow;
         display: none;
-    }}
+    }
     """
 
     def __init__(self) -> None:
@@ -211,6 +214,13 @@ class ConfigSubApp(SubApp):
     def compose(self) -> ComposeResult:
         v = self.config_values
         yield Static("GlobalConfig Editor", classes="subapp-header")
+
+        yield Label("theme", classes="field-label")
+        yield CycleSelect(
+            _THEME_OPTIONS,
+            value=str(v.get("theme", theme.DEFAULT_THEME)),
+            id="cfg-theme",
+        )
 
         yield Label("viewer", classes="field-label")
         yield CycleSelect(
@@ -242,9 +252,22 @@ class ConfigSubApp(SubApp):
         self.query_one("#cfg-dirty-notice").styles.display = "block"
 
     def on_cycle_select_changed(self, event: CycleSelect.Changed) -> None:
-        self.config_values["viewer"] = event.value
-        _save_config(self.config_values)
-        self._mark_dirty()
+        if event.widget_id == "cfg-theme":
+            self.config_values["theme"] = event.value
+            _save_config(self.config_values)
+            self._apply_theme(event.value)
+        elif event.widget_id == "cfg-viewer":
+            self.config_values["viewer"] = event.value
+            _save_config(self.config_values)
+            self._mark_dirty()
+
+    def _apply_theme(self, name: str) -> None:
+        """Switch theme live."""
+        theme.set_theme(name)
+        try:
+            self.app.theme = f"dimos-{name}"
+        except Exception:
+            pass
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "cfg-n-workers":

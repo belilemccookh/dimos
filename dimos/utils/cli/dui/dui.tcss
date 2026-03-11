@@ -2,13 +2,13 @@
 
 Screen {
     layout: horizontal;
-    background: #0b0f0f;
+    background: $dui-bg;
 }
 
 #sidebar {
     width: 22;
     height: 1fr;
-    background: #0b0f0f;
+    background: $dui-bg;
     padding: 1 0;
 }
 
@@ -17,23 +17,23 @@ Screen {
     height: 3;
     padding: 1 2;
     content-align: left middle;
-    background: #0b0f0f;
-    color: #b5e4f4;
+    background: $dui-bg;
+    color: $dui-text;
 }
 
 .tab-item.--selected-1 {
-    background: #1a2a2a;
-    color: #00eeee;
+    background: $dui-tab1-bg;
+    color: $dui-tab1;
 }
 
 .tab-item.--selected-2 {
-    background: #1a1a2a;
-    color: #5c9ff0;
+    background: $dui-tab2-bg;
+    color: $dui-tab2;
 }
 
 .tab-item.--selected-3 {
-    background: #2a1a2a;
-    color: #c07ff0;
+    background: $dui-tab3-bg;
+    color: $dui-tab3;
 }
 
 #displays {
@@ -45,12 +45,12 @@ Screen {
 .display-pane {
     width: 1fr;
     height: 1fr;
-    border: solid #404040;
-    background: #0b0f0f;
+    border: solid $dui-dim;
+    background: $dui-bg;
 }
 
 .display-pane.--focused {
-    border: solid #00eeee;
+    border: solid $dui-accent;
 }
 
 #display-2 {
@@ -65,9 +65,9 @@ Screen {
     width: 50;
     height: 1fr;
     dock: right;
-    border-left: solid #404040;
-    background: #0b0f0f;
-    color: #b5e4f4;
+    border-left: solid $dui-dim;
+    background: $dui-bg;
+    color: $dui-text;
     padding: 0 1;
     scrollbar-size: 1 1;
 }
@@ -76,8 +76,8 @@ Screen {
     dock: top;
     height: 1;
     width: 100%;
-    background: #1a2020;
-    color: #404040;
+    background: $dui-hint-bg;
+    color: $dui-dim;
     padding: 0 1;
     content-align: left middle;
 }

@@ -50,6 +50,21 @@ def _launch_log_plain_path() -> Path:
     return _launch_log_dir() / "launch.plain.log"
 
 
+def _copy_plain_log_to_run_dir(plain_file: Path) -> None:
+    """Copy the plain launch log into the most recent run's log directory."""
+    import shutil
+
+    try:
+        from dimos.core.run_registry import get_most_recent
+
+        entry = get_most_recent(alive_only=False)
+        if entry and entry.log_dir:
+            dest = Path(entry.log_dir) / "launch.log"
+            shutil.copy2(plain_file, dest)
+    except Exception:
+        pass
+
+
 def _is_blueprint_running() -> bool:
     """Return True if a blueprint is currently running."""
     try:
@@ -63,53 +78,53 @@ def _is_blueprint_running() -> bool:
 class LauncherSubApp(SubApp):
     TITLE = "launch"
 
-    DEFAULT_CSS = f"""
-    LauncherSubApp {{
+    DEFAULT_CSS = """
+    LauncherSubApp {
         layout: vertical;
         height: 1fr;
-        background: {theme.BACKGROUND};
-    }}
-    LauncherSubApp .subapp-header {{
+        background: $dui-bg;
+    }
+    LauncherSubApp .subapp-header {
         width: 100%;
         height: auto;
-        color: #ff8800;
+        color: $dui-header;
         padding: 1 2;
         text-style: bold;
-    }}
-    LauncherSubApp #launch-filter {{
+    }
+    LauncherSubApp #launch-filter {
         width: 100%;
-        background: {theme.BACKGROUND};
-        border: solid {theme.DIM};
-        color: {theme.ACCENT};
-    }}
-    LauncherSubApp #launch-filter:focus {{
-        border: solid {theme.CYAN};
-    }}
-    LauncherSubApp ListView {{
+        background: $dui-bg;
+        border: solid $dui-dim;
+        color: $dui-text;
+    }
+    LauncherSubApp #launch-filter:focus {
+        border: solid $dui-accent;
+    }
+    LauncherSubApp ListView {
         height: 1fr;
-        background: {theme.BACKGROUND};
-    }}
-    LauncherSubApp ListView > ListItem {{
-        background: {theme.BACKGROUND};
-        color: {theme.ACCENT};
+        background: $dui-bg;
+    }
+    LauncherSubApp ListView > ListItem {
+        background: $dui-bg;
+        color: $dui-text;
         padding: 1 2;
-    }}
-    LauncherSubApp ListView > ListItem.--highlight {{
-        background: #1a2a2a;
-    }}
-    LauncherSubApp.--locked ListView {{
+    }
+    LauncherSubApp ListView > ListItem.--highlight {
+        background: $dui-panel-bg;
+    }
+    LauncherSubApp.--locked ListView {
         opacity: 0.35;
-    }}
-    LauncherSubApp.--locked #launch-filter {{
+    }
+    LauncherSubApp.--locked #launch-filter {
         opacity: 0.35;
-    }}
-    LauncherSubApp .status-bar {{
+    }
+    LauncherSubApp .status-bar {
         height: 1;
         dock: bottom;
-        background: #1a2020;
-        color: {theme.DIM};
+        background: $dui-hint-bg;
+        color: $dui-dim;
         padding: 0 1;
-    }}
+    }
     """
 
     def __init__(self) -> None:
@@ -299,6 +314,9 @@ class LauncherSubApp(SubApp):
                         f_plain.flush()
                     proc.wait()
                 rc = proc.returncode
+
+                # Copy plain log into the run's log directory for archival
+                _copy_plain_log_to_run_dir(plain_file)
 
                 def _after() -> None:
                     self._launching = False

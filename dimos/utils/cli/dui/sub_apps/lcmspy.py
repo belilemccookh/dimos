@@ -31,22 +31,22 @@ if TYPE_CHECKING:
 class LCMSpySubApp(SubApp):
     TITLE = "lcmspy"
 
-    DEFAULT_CSS = f"""
-    LCMSpySubApp {{
+    DEFAULT_CSS = """
+    LCMSpySubApp {
         layout: vertical;
-        background: {theme.BACKGROUND};
-    }}
-    LCMSpySubApp DataTable {{
+        background: $dui-bg;
+    }
+    LCMSpySubApp DataTable {
         height: 1fr;
         width: 1fr;
-        border: solid {theme.DIM};
-        background: {theme.BG};
+        border: solid $dui-dim;
+        background: $dui-bg;
         scrollbar-size: 0 0;
-    }}
-    LCMSpySubApp DataTable > .datatable--header {{
-        color: {theme.ACCENT};
+    }
+    LCMSpySubApp DataTable > .datatable--header {
+        color: $dui-text;
         background: transparent;
-    }}
+    }
     """
 
     def __init__(self) -> None:

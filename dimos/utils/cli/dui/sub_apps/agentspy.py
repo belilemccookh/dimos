@@ -14,17 +14,17 @@ from dimos.utils.cli.dui.sub_app import SubApp
 class AgentSpySubApp(SubApp):
     TITLE = "agentspy"
 
-    DEFAULT_CSS = f"""
-    AgentSpySubApp {{
+    DEFAULT_CSS = """
+    AgentSpySubApp {
         layout: vertical;
-        background: {theme.BACKGROUND};
-    }}
-    AgentSpySubApp RichLog {{
+        background: $dui-bg;
+    }
+    AgentSpySubApp RichLog {
         height: 1fr;
         border: none;
-        background: {theme.BACKGROUND};
+        background: $dui-bg;
         padding: 0 1;
-    }}
+    }
     """
 
     def __init__(self) -> None:
