@@ -35,7 +35,7 @@ from dimos.utils.cli.dtop import (
     ResourceSpyApp,
     _compute_ranges,
 )
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -48,7 +48,7 @@ class DtopSubApp(SubApp):
     DtopSubApp {
         layout: vertical;
         height: 1fr;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     DtopSubApp VerticalScroll {
         height: 1fr;
@@ -78,7 +78,7 @@ class DtopSubApp(SubApp):
 
     def _debug(self, msg: str) -> None:
         try:
-            self.app._log(f"[#8899aa]DTOP:[/#8899aa] {msg}")  # type: ignore[attr-defined]
+            self.app._log(f"[{theme.BTN_MUTED}]DTOP:[/{theme.BTN_MUTED}] {msg}")  # type: ignore[attr-defined]
         except Exception:
             pass
 
@@ -278,8 +278,8 @@ class DtopSubApp(SubApp):
             self._reconnecting = True
             self._debug(f"No data for {now - last_msg:.0f}s, reconnecting LCM...")
             self.run_worker(self._reconnect_lcm, exclusive=True, thread=True)
-        dim = "#606060"
-        border_style = dim if stale else "#777777"
+        dim = theme.STALE_COLOR
+        border_style = dim if stale else theme.PID_COLOR
 
         entries: list[tuple[str, str, dict[str, Any], str, str]] = []
         coord = data.get("coordinator", {})
@@ -307,7 +307,7 @@ class DtopSubApp(SubApp):
                     title.append(": ", style=dim if stale else _LABEL_COLOR)
                     title.append(mods, style=dim if stale else rs)
                 if pid:
-                    title.append(f" [{pid}]", style=dim if stale else "#777777")
+                    title.append(f" [{pid}]", style=dim if stale else theme.PID_COLOR)
                 title.append(" ")
                 parts.append(Rule(title=title, style=border_style))
             parts.extend(ResourceSpyApp._make_lines(d, stale, ranges, self._cpu_history[role]))
@@ -319,7 +319,7 @@ class DtopSubApp(SubApp):
             panel_title.append(": ", style=dim if stale else _LABEL_COLOR)
             panel_title.append(first_mods, style=dim if stale else first_rs)
         if first_pid:
-            panel_title.append(f" [{first_pid}]", style=dim if stale else "#777777")
+            panel_title.append(f" [{first_pid}]", style=dim if stale else theme.PID_COLOR)
         panel_title.append(" ")
 
         panel = Panel(Group(*parts), title=panel_title, border_style=border_style)

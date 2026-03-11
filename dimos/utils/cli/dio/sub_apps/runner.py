@@ -30,7 +30,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, RichLog, Static
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -59,19 +59,19 @@ class StatusSubApp(SubApp):
     StatusSubApp {
         layout: vertical;
         height: 1fr;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     StatusSubApp .subapp-header {
         width: 100%;
         height: auto;
-        color: $dui-header;
+        color: $dio-accent2;
         padding: 1 2;
         text-style: bold;
     }
     StatusSubApp RichLog {
         height: 1fr;
-        background: $dui-bg;
-        border: solid $dui-dim;
+        background: $dio-bg;
+        border: solid $dio-dim;
         scrollbar-size-vertical: 0;
         scrollbar-size-horizontal: 1;
     }
@@ -86,69 +86,69 @@ class StatusSubApp(SubApp):
     StatusSubApp #run-controls {
         height: auto;
         padding: 0 1;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     StatusSubApp #run-controls Button {
         margin: 0 1 0 0;
         min-width: 12;
         background: transparent;
-        border: solid $dui-dim;
-        color: $dui-text;
+        border: solid $dio-dim;
+        color: $dio-text;
     }
     StatusSubApp .status-bar {
         height: 1;
         dock: bottom;
-        background: $dui-hint-bg;
-        color: $dui-dim;
+        background: $dio-hint-bg;
+        color: $dio-dim;
         padding: 0 1;
     }
     StatusSubApp #btn-stop {
-        border: solid #882222;
-        color: #cc4444;
+        border: solid $dio-btn-danger-bg;
+        color: $dio-btn-danger;
     }
     StatusSubApp #btn-stop:hover {
-        border: solid #cc4444;
+        border: solid $dio-btn-danger;
     }
     StatusSubApp #btn-stop:focus {
-        background: #882222;
-        color: #ffffff;
-        border: solid #cc4444;
+        background: $dio-btn-danger-bg;
+        color: $dio-white;
+        border: solid $dio-btn-danger;
     }
     StatusSubApp #btn-sudo-kill {
-        border: solid #882222;
-        color: #ff4444;
+        border: solid $dio-btn-kill-bg;
+        color: $dio-btn-kill;
     }
     StatusSubApp #btn-sudo-kill:hover {
-        border: solid #ff4444;
+        border: solid $dio-btn-kill;
     }
     StatusSubApp #btn-sudo-kill:focus {
-        background: #882222;
-        color: #ffffff;
-        border: solid #ff4444;
+        background: $dio-btn-kill-bg;
+        color: $dio-white;
+        border: solid $dio-btn-kill;
     }
     StatusSubApp #btn-restart {
-        border: solid #886600;
-        color: #ccaa00;
+        border: solid $dio-btn-warn-bg;
+        color: $dio-btn-warn;
     }
     StatusSubApp #btn-restart:hover {
-        border: solid #ccaa00;
+        border: solid $dio-btn-warn;
     }
     StatusSubApp #btn-restart:focus {
-        background: #886600;
-        color: #ffffff;
-        border: solid #ccaa00;
+        background: $dio-btn-warn-bg;
+        color: $dio-white;
+        border: solid $dio-btn-warn;
     }
     StatusSubApp #btn-open-log {
-        border: solid #445566;
-        color: #8899aa;
+        border: solid $dio-btn-muted-bg;
+        color: $dio-btn-muted;
     }
     StatusSubApp #btn-open-log:hover {
-        border: solid #8899aa;
+        border: solid $dio-btn-muted;
     }
     StatusSubApp #btn-open-log:focus {
-        background: #445566;
-        color: #ffffff;
-        border: solid #8899aa;
+        background: $dio-btn-muted-bg;
+        color: $dio-white;
+        border: solid $dio-btn-muted;
     }
     """
 
@@ -166,9 +166,9 @@ class StatusSubApp(SubApp):
         self._saved_status: str = ""
 
     def _debug(self, msg: str) -> None:
-        """Log to the DUI debug panel if available."""
+        """Log to the DIO debug panel if available."""
         try:
-            self.app._log(f"[#8899aa]STATUS:[/#8899aa] {msg}")  # type: ignore[attr-defined]
+            self.app._log(f"[{theme.BTN_MUTED}]STATUS:[/{theme.BTN_MUTED}] {msg}")  # type: ignore[attr-defined]
         except Exception:
             pass
 
@@ -186,7 +186,7 @@ class StatusSubApp(SubApp):
 
     def _idle_panel(self) -> Panel:
         msg = Text(justify="center")
-        msg.append("No Blueprint Running\n\n", style="bold #cc4444")
+        msg.append("No Blueprint Running\n\n", style=f"bold {theme.BTN_DANGER}")
         msg.append("Use the ", style=theme.DIM)
         msg.append("launch", style=f"bold {theme.CYAN}")
         msg.append(" tab to start a blueprint", style=theme.DIM)
@@ -804,7 +804,7 @@ class StatusSubApp(SubApp):
 
             config_args: list[str] = []
             try:
-                from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
+                from dimos.utils.cli.dio.sub_apps.config import ConfigSubApp
 
                 for inst in self.app._instances:  # type: ignore[attr-defined]
                     if isinstance(inst, ConfigSubApp):
@@ -859,7 +859,7 @@ class StatusSubApp(SubApp):
 
                 # Copy plain log into the run's log directory for archival
                 try:
-                    from dimos.utils.cli.dui.sub_apps.launcher import _copy_plain_log_to_run_dir
+                    from dimos.utils.cli.dio.sub_apps.launcher import _copy_plain_log_to_run_dir
 
                     _copy_plain_log_to_run_dir(plain_file)
                 except Exception:

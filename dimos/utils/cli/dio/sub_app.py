@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SubApp base class for DUI sub-applications."""
+"""SubApp base class for DIO sub-applications."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from textual.widget import Widget
 
 
 class SubApp(Widget):
-    """Base class for DUI sub-applications.
+    """Base class for DIO sub-applications.
 
     Each sub-app is a Widget that renders inside a display pane.
     Subclasses must set TITLE and implement compose().
@@ -32,7 +32,7 @@ class SubApp(Widget):
       - on_resume_subapp() is called on every subsequent remount
         (e.g. when the widget is moved between display panels).
         Use this to restart timers killed by remove().
-      - on_unmount_subapp() is called when the DUI app is shutting down,
+      - on_unmount_subapp() is called when the DIO app is shutting down,
         NOT on every tab switch.
     """
 
@@ -97,7 +97,7 @@ class SubApp(Widget):
         """
 
     def on_unmount_subapp(self) -> None:
-        """Called when the DUI app tears down this sub-app.
+        """Called when the DIO app tears down this sub-app.
 
         Override to stop LCM subscriptions, timers, etc.
         """

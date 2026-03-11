@@ -8,7 +8,7 @@ from textual.app import ComposeResult
 from textual.widgets import RichLog
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 
 class AgentSpySubApp(SubApp):
@@ -17,12 +17,12 @@ class AgentSpySubApp(SubApp):
     DEFAULT_CSS = """
     AgentSpySubApp {
         layout: vertical;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     AgentSpySubApp RichLog {
         height: 1fr;
         border: none;
-        background: $dui-bg;
+        background: $dio-bg;
         padding: 0 1;
     }
     """

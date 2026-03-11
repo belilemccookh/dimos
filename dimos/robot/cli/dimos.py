@@ -191,6 +191,10 @@ def run(
 
         daemonize(log_dir)
 
+        # os.fork() only copies the calling thread — restart any daemon
+        # threads (e.g. StatsMonitor) that were killed by the double-fork.
+        coordinator.restart_daemon_threads()
+
         entry = RunEntry(
             run_id=run_id,
             pid=os.getpid(),
@@ -492,11 +496,11 @@ def dio(
     debug: bool = typer.Option(False, "--debug", help="Show debug panel with key event log"),
 ) -> None:
     """Launch the DimOS Unified TUI."""
-    from dimos.utils.cli.dui.app import main as dui_main
+    from dimos.utils.cli.dio.app import main as dio_main
 
     if debug:
         sys.argv.append("--debug")
-    dui_main()
+    dio_main()
 
 
 @main.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})

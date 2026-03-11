@@ -29,7 +29,7 @@ from textual.widget import Widget
 from textual.widgets import Input, Label, Static, Switch
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -153,20 +153,20 @@ class ConfigSubApp(SubApp):
     ConfigSubApp {
         layout: vertical;
         padding: 1 2;
-        background: $dui-bg;
+        background: $dio-bg;
         overflow-y: auto;
     }
     ConfigSubApp .subapp-header {
-        color: $dui-header;
+        color: $dio-accent2;
         padding: 0;
         text-style: bold;
     }
     ConfigSubApp Label {
         margin-top: 1;
-        color: $dui-text;
+        color: $dio-text;
     }
     ConfigSubApp .field-label {
-        color: $dui-accent;
+        color: $dio-accent;
         margin-bottom: 0;
     }
     ConfigSubApp Input, ConfigSubApp ConfigInput {
@@ -175,14 +175,14 @@ class ConfigSubApp(SubApp):
     ConfigSubApp CycleSelect {
         width: 40;
         height: 3;
-        background: $dui-bg;
-        color: $dui-text;
-        border: solid $dui-dim;
+        background: $dio-bg;
+        color: $dio-text;
+        border: solid $dio-dim;
         content-align: left middle;
     }
     ConfigSubApp CycleSelect:focus {
-        border: solid $dui-accent;
-        color: $dui-accent;
+        border: solid $dio-accent;
+        color: $dio-accent;
     }
     ConfigSubApp .switch-row {
         height: 3;
@@ -193,16 +193,16 @@ class ConfigSubApp(SubApp):
         padding: 1 0;
     }
     ConfigSubApp .switch-state {
-        color: $dui-dim;
+        color: $dio-dim;
         padding: 1 1;
         width: 6;
     }
     ConfigSubApp .switch-state.--on {
-        color: $dui-accent;
+        color: $dio-accent;
     }
     ConfigSubApp #cfg-dirty-notice {
         margin-top: 1;
-        color: $dui-yellow;
+        color: $dio-yellow;
         display: none;
     }
     """

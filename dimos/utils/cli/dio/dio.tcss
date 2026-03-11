@@ -1,14 +1,14 @@
-/* DUI — DimOS Unified TUI */
+/* DIO — DimOS Unified TUI */
 
 Screen {
     layout: horizontal;
-    background: $dui-bg;
+    background: $dio-bg;
 }
 
 #sidebar {
     width: 22;
     height: 1fr;
-    background: $dui-bg;
+    background: $dio-bg;
     padding: 1 0;
 }
 
@@ -17,23 +17,23 @@ Screen {
     height: 3;
     padding: 1 2;
     content-align: left middle;
-    background: $dui-bg;
-    color: $dui-text;
+    background: $dio-bg;
+    color: $dio-text;
 }
 
 .tab-item.--selected-1 {
-    background: $dui-tab1-bg;
-    color: $dui-tab1;
+    background: $dio-tab1-bg;
+    color: $dio-tab1;
 }
 
 .tab-item.--selected-2 {
-    background: $dui-tab2-bg;
-    color: $dui-tab2;
+    background: $dio-tab2-bg;
+    color: $dio-tab2;
 }
 
 .tab-item.--selected-3 {
-    background: $dui-tab3-bg;
-    color: $dui-tab3;
+    background: $dio-tab3-bg;
+    color: $dio-tab3;
 }
 
 #displays {
@@ -45,12 +45,12 @@ Screen {
 .display-pane {
     width: 1fr;
     height: 1fr;
-    border: solid $dui-dim;
-    background: $dui-bg;
+    border: solid $dio-dim;
+    background: $dio-bg;
 }
 
 .display-pane.--focused {
-    border: solid $dui-accent;
+    border: solid $dio-accent;
 }
 
 #display-2 {
@@ -65,9 +65,9 @@ Screen {
     width: 50;
     height: 1fr;
     dock: right;
-    border-left: solid $dui-dim;
-    background: $dui-bg;
-    color: $dui-text;
+    border-left: solid $dio-dim;
+    background: $dio-bg;
+    color: $dio-text;
     padding: 0 1;
     scrollbar-size: 1 1;
 }
@@ -76,8 +76,8 @@ Screen {
     dock: top;
     height: 1;
     width: 100%;
-    background: $dui-hint-bg;
-    color: $dui-dim;
+    background: $dio-hint-bg;
+    color: $dio-dim;
     padding: 0 1;
     content-align: left middle;
 }

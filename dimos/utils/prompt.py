@@ -37,21 +37,21 @@ _answer_cache: dict[str, bool] = {}
 
 
 def set_dio_hook(hook: Any) -> None:
-    """Register the dio TUI confirm handler (called by DUIApp on startup)."""
+    """Register the dio TUI confirm handler (called by DIOApp on startup)."""
     global _dio_confirm_hook
     with _lock:
         _dio_confirm_hook = hook
 
 
 def set_dio_sudo_hook(hook: Any) -> None:
-    """Register the dio TUI sudo handler (called by DUIApp on startup)."""
+    """Register the dio TUI sudo handler (called by DIOApp on startup)."""
     global _dio_sudo_hook
     with _lock:
         _dio_sudo_hook = hook
 
 
 def clear_dio_hook() -> None:
-    """Unregister all dio TUI handlers (called by DUIApp on shutdown)."""
+    """Unregister all dio TUI handlers (called by DIOApp on shutdown)."""
     global _dio_confirm_hook, _dio_sudo_hook
     with _lock:
         _dio_confirm_hook = None

@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -82,35 +82,35 @@ class LauncherSubApp(SubApp):
     LauncherSubApp {
         layout: vertical;
         height: 1fr;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     LauncherSubApp .subapp-header {
         width: 100%;
         height: auto;
-        color: $dui-header;
+        color: $dio-accent2;
         padding: 1 2;
         text-style: bold;
     }
     LauncherSubApp #launch-filter {
         width: 100%;
-        background: $dui-bg;
-        border: solid $dui-dim;
-        color: $dui-text;
+        background: $dio-bg;
+        border: solid $dio-dim;
+        color: $dio-text;
     }
     LauncherSubApp #launch-filter:focus {
-        border: solid $dui-accent;
+        border: solid $dio-accent;
     }
     LauncherSubApp ListView {
         height: 1fr;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     LauncherSubApp ListView > ListItem {
-        background: $dui-bg;
-        color: $dui-text;
+        background: $dio-bg;
+        color: $dio-text;
         padding: 1 2;
     }
     LauncherSubApp ListView > ListItem.--highlight {
-        background: $dui-panel-bg;
+        background: $dio-panel-bg;
     }
     LauncherSubApp.--locked ListView {
         opacity: 0.35;
@@ -121,8 +121,8 @@ class LauncherSubApp(SubApp):
     LauncherSubApp .status-bar {
         height: 1;
         dock: bottom;
-        background: $dui-hint-bg;
-        color: $dui-dim;
+        background: $dio-hint-bg;
+        color: $dio-dim;
         padding: 0 1;
     }
     """
@@ -266,7 +266,7 @@ class LauncherSubApp(SubApp):
         # Gather config overrides
         config_args: list[str] = []
         try:
-            from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
+            from dimos.utils.cli.dio.sub_apps.config import ConfigSubApp
 
             for inst in self.app._instances:  # type: ignore[attr-defined]
                 if isinstance(inst, ConfigSubApp):

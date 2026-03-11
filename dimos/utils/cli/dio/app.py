@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""DUI — DimOS Unified TUI."""
+"""DIO — DimOS Unified TUI."""
 
 from __future__ import annotations
 
@@ -28,13 +28,13 @@ from textual.containers import Container, Horizontal
 from textual.widgets import RichLog, Static
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_apps import get_sub_apps
+from dimos.utils.cli.dio.sub_apps import get_sub_apps
 
 if TYPE_CHECKING:
     from textual.events import Click, Key, Resize
     from textual.widget import Widget
 
-    from dimos.utils.cli.dui.sub_app import SubApp
+    from dimos.utils.cli.dio.sub_app import SubApp
 
 _DUAL_WIDTH = 240  # >= this width: 2 panels
 _TRIPLE_WIDTH = 320  # >= this width: 3 panels
@@ -42,8 +42,8 @@ _MAX_PANELS = 3
 _QUIT_WINDOW = 1.5  # seconds to press again to confirm quit
 
 
-class DUIApp(App[None]):
-    CSS_PATH = "dui.tcss"
+class DIOApp(App[None]):
+    CSS_PATH = "dio.tcss"
 
     BINDINGS = [
         Binding("alt+up", "tab_prev", "Tab prev", priority=True),
@@ -223,9 +223,9 @@ class DUIApp(App[None]):
         focused_id = getattr(focused, "id", None) or ""
         panel = self._panel_for_widget(focused)
         self._log(
-            f"[#b5e4f4]KEY[/#b5e4f4] [bold #00eeee]{event.key!r}[/bold #00eeee]"
+            f"[{theme.DEBUG_KEY}]KEY[/{theme.DEBUG_KEY}] [bold {theme.CYAN}]{event.key!r}[/bold {theme.CYAN}]"
             f"  char={event.character!r}"
-            f"  focused=[#5c9ff0]{focused_name}#{focused_id}[/#5c9ff0]"
+            f"  focused=[{theme.DEBUG_FOCUS}]{focused_name}#{focused_id}[/{theme.DEBUG_FOCUS}]"
             f"  _focused_panel={self._focused_panel}  actual_panel={panel}"
         )
 
@@ -314,26 +314,26 @@ class DUIApp(App[None]):
 
     async def action_tab_prev(self) -> None:
         self._log(
-            f"[#ffcc00]ACTION[/#ffcc00] tab_prev  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
+            f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] tab_prev  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
         )
         self._clear_quit_pending()
         await self._move_tab(-1)
 
     async def action_tab_next(self) -> None:
         self._log(
-            f"[#ffcc00]ACTION[/#ffcc00] tab_next  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
+            f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] tab_next  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
         )
         self._clear_quit_pending()
         await self._move_tab(1)
 
     def action_focus_prev_panel(self) -> None:
-        self._log(f"[#ffcc00]ACTION[/#ffcc00] focus_prev_panel  (was panel={self._focused_panel})")
+        self._log(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] focus_prev_panel  (was panel={self._focused_panel})")
         self._clear_quit_pending()
         new = max(0, self._focused_panel - 1)
         self._focus_panel(new)
 
     def action_focus_next_panel(self) -> None:
-        self._log(f"[#ffcc00]ACTION[/#ffcc00] focus_next_panel  (was panel={self._focused_panel})")
+        self._log(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] focus_next_panel  (was panel={self._focused_panel})")
         self._clear_quit_pending()
         new = min(self._num_panels - 1, self._focused_panel + 1)
         self._focus_panel(new)
@@ -344,13 +344,13 @@ class DUIApp(App[None]):
         if selected:
             self.copy_to_clipboard(selected)
             self.screen.clear_selection()
-            self._log("[#ffcc00]ACTION[/#ffcc00] copy_text (copied to clipboard)")
+            self._log(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] copy_text (copied to clipboard)")
         else:
-            self._log("[#ffcc00]ACTION[/#ffcc00] copy_text -> no selection, treating as quit")
+            self._log(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] copy_text -> no selection, treating as quit")
             self._handle_quit_press()
 
     def action_quit_or_esc(self) -> None:
-        self._log("[#ffcc00]ACTION[/#ffcc00] quit_or_esc")
+        self._log(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] quit_or_esc")
         self._handle_quit_press()
 
     # ------------------------------------------------------------------
@@ -444,7 +444,7 @@ class DUIApp(App[None]):
     _pending_confirms_lock = threading.Lock()
 
     def _handle_confirm(self, message: str, default: bool) -> bool | None:
-        from dimos.utils.cli.dui.confirm_screen import ConfirmScreen
+        from dimos.utils.cli.dio.confirm_screen import ConfirmScreen
 
         with self._pending_confirms_lock:
             if message in self._pending_confirms:
@@ -476,7 +476,7 @@ class DUIApp(App[None]):
     _pending_sudos_lock = threading.Lock()
 
     def _handle_sudo(self, message: str) -> bool | None:
-        from dimos.utils.cli.dui.confirm_screen import SudoScreen
+        from dimos.utils.cli.dio.confirm_screen import SudoScreen
 
         with self._pending_sudos_lock:
             if message in self._pending_sudos:
@@ -510,7 +510,7 @@ def main() -> None:
     if debug:
         sys.argv.remove("--debug")
 
-    app = DUIApp(debug=debug)
+    app = DIOApp(debug=debug)
     set_dio_hook(app._handle_confirm)
     set_dio_sudo_hook(app._handle_sudo)
 

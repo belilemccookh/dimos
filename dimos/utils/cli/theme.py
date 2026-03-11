@@ -14,16 +14,16 @@
 
 """DimOS theme system.
 
-Provides named themes for the DUI TUI. Each theme defines:
+Provides named themes for the DIO TUI. Each theme defines:
   - Textual Theme fields (primary, background, etc.) for built-in widgets
-  - Custom CSS variables (prefixed ``dui-``) for DimOS-specific styling
+  - Custom CSS variables (prefixed ``dio-``) for DimOS-specific styling
   - Python-level constants (ACCENT, DIM, AGENT, …) for Rich markup
 
 Usage in CSS::
 
-    background: $dui-bg;
-    border: solid $dui-dim;
-    color: $dui-text;
+    background: $dio-bg;
+    border: solid $dio-dim;
+    color: $dio-text;
 
 Usage in Python (Rich markup)::
 
@@ -49,7 +49,7 @@ def parse_tcss_colors(tcss_path: str | Path) -> dict[str, str]:
 _THEME_PATH = Path(__file__).parent / "dimos.tcss"
 COLORS = parse_tcss_colors(_THEME_PATH)
 
-# Export CSS path for standalone Textual apps (not DUI)
+# Export CSS path for standalone Textual apps (not DIO)
 CSS_PATH = str(_THEME_PATH)
 
 
@@ -65,126 +65,191 @@ def get(name: str, default: str = "#ffffff") -> str:
 
 # Each entry maps custom CSS variable names (without ``$``) to hex values.
 # These are injected into Textual's CSS variable system via Theme.variables.
-# The keys here become ``$dui-bg``, ``$dui-dim``, etc. in CSS.
+# The keys here become ``$dio-bg``, ``$dio-dim``, etc. in CSS.
+#
+# Variable naming:
+#   Core:      dio-bg, dio-fg, dio-text, dio-dim, dio-accent, dio-accent2
+#   Palette:   dio-red, dio-orange, dio-yellow, dio-green, dio-blue, dio-purple, dio-cyan, dio-white, dio-grey
+#   Chat:      dio-agent, dio-tool, dio-tool-result, dio-human, dio-timestamp
+#   Buttons:   dio-btn-danger, dio-btn-danger-bg, dio-btn-warn, dio-btn-warn-bg,
+#              dio-btn-muted, dio-btn-muted-bg, dio-btn-kill, dio-btn-kill-bg
+#   Chrome:    dio-panel-bg, dio-hint-bg
+#   Tabs:      dio-tab1, dio-tab1-bg, dio-tab2, dio-tab2-bg, dio-tab3, dio-tab3-bg
+#   LCMSpy:    dio-bw-low, dio-bw-high
+#   Dtop:      dio-label, dio-stale, dio-pid
+#   Debug:     dio-debug-key, dio-debug-action, dio-debug-focus
 
 _THEME_VARIABLES: dict[str, dict[str, str]] = {
-    "dark": {
+    "dark-one": {
         # Core
-        "dui-bg": "#0b0f0f",
-        "dui-fg": "#b5e4f4",
-        "dui-text": "#b5e4f4",
-        "dui-dim": "#404040",
-        "dui-accent": "#00eeee",
-        "dui-border": "#00eeee",
-        # Base palette
-        "dui-yellow": "#ffcc00",
-        "dui-red": "#ff0000",
-        "dui-green": "#00eeee",
-        "dui-blue": "#5c9ff0",
-        "dui-purple": "#c07ff0",
+        "dio-bg": "#0b0f0f",
+        "dio-fg": "#b5e4f4",
+        "dio-text": "#b5e4f4",
+        "dio-dim": "#404040",
+        "dio-accent": "#00eeee",
+        "dio-accent2": "#ff8800",
+        # Named palette
+        "dio-red": "#ff0000",
+        "dio-orange": "#ff8800",
+        "dio-yellow": "#ffcc00",
+        "dio-green": "#00ee88",
+        "dio-blue": "#5c9ff0",
+        "dio-purple": "#c07ff0",
+        "dio-cyan": "#00eeee",
+        "dio-white": "#ffffff",
+        "dio-grey": "#777777",
         # Chat message colors
-        "dui-agent": "#88ff88",
-        "dui-tool": "#00eeee",
-        "dui-tool-result": "#ffff00",
-        "dui-human": "#ffffff",
-        "dui-timestamp": "#ffffff",
+        "dio-agent": "#88ff88",
+        "dio-tool": "#00eeee",
+        "dio-tool-result": "#ffff00",
+        "dio-human": "#ffffff",
+        "dio-timestamp": "#ffffff",
+        # Buttons
+        "dio-btn-danger": "#cc4444",
+        "dio-btn-danger-bg": "#882222",
+        "dio-btn-warn": "#ccaa00",
+        "dio-btn-warn-bg": "#886600",
+        "dio-btn-muted": "#8899aa",
+        "dio-btn-muted-bg": "#445566",
+        "dio-btn-kill": "#ff4444",
+        "dio-btn-kill-bg": "#882222",
         # UI chrome
-        "dui-header": "#ff8800",
-        "dui-panel-bg": "#1a2a2a",
-        "dui-hint-bg": "#1a2020",
-        "dui-tab1": "#00eeee",
-        "dui-tab1-bg": "#1a2a2a",
-        "dui-tab2": "#5c9ff0",
-        "dui-tab2-bg": "#1a1a2a",
-        "dui-tab3": "#c07ff0",
-        "dui-tab3-bg": "#2a1a2a",
+        "dio-panel-bg": "#1a2a2a",
+        "dio-hint-bg": "#1a2020",
+        # Tabs
+        "dio-tab1": "#00eeee",
+        "dio-tab1-bg": "#1a2a2a",
+        "dio-tab2": "#5c9ff0",
+        "dio-tab2-bg": "#1a1a2a",
+        "dio-tab3": "#c07ff0",
+        "dio-tab3-bg": "#2a1a2a",
+        # LCMSpy bandwidth gradient
+        "dio-bw-low": "#00eeee",
+        "dio-bw-high": "#ffcc00",
+        # Dtop
+        "dio-label": "#cccccc",
+        "dio-stale": "#606060",
+        "dio-pid": "#777777",
+        # Debug
+        "dio-debug-key": "#b5e4f4",
+        "dio-debug-action": "#ffcc00",
+        "dio-debug-focus": "#5c9ff0",
     },
-    "midnight": {
-        "dui-bg": "#0a0e1a",
-        "dui-fg": "#a0b8d0",
-        "dui-text": "#a0b8d0",
-        "dui-dim": "#303850",
-        "dui-accent": "#4488cc",
-        "dui-border": "#4488cc",
-        "dui-yellow": "#ccaa44",
-        "dui-red": "#cc4444",
-        "dui-green": "#44aa88",
-        "dui-blue": "#5588dd",
-        "dui-purple": "#8866cc",
-        "dui-agent": "#66cc88",
-        "dui-tool": "#4488cc",
-        "dui-tool-result": "#ccaa44",
-        "dui-human": "#d0d8e0",
-        "dui-timestamp": "#8899bb",
-        "dui-header": "#dd8833",
-        "dui-panel-bg": "#151c2e",
-        "dui-hint-bg": "#101828",
-        "dui-tab1": "#4488cc",
-        "dui-tab1-bg": "#151c2e",
-        "dui-tab2": "#5588dd",
-        "dui-tab2-bg": "#14183a",
-        "dui-tab3": "#8866cc",
-        "dui-tab3-bg": "#1c1430",
+    "dark-two": {
+        # Core
+        "dio-bg": "#0a0e1a",
+        "dio-fg": "#a0b8d0",
+        "dio-text": "#a0b8d0",
+        "dio-dim": "#303850",
+        "dio-accent": "#4488cc",
+        "dio-accent2": "#dd8833",
+        # Named palette
+        "dio-red": "#cc4444",
+        "dio-orange": "#dd8833",
+        "dio-yellow": "#ccaa44",
+        "dio-green": "#44aa88",
+        "dio-blue": "#5588dd",
+        "dio-purple": "#8866cc",
+        "dio-cyan": "#4488cc",
+        "dio-white": "#d0d8e0",
+        "dio-grey": "#667788",
+        # Chat message colors
+        "dio-agent": "#66cc88",
+        "dio-tool": "#4488cc",
+        "dio-tool-result": "#ccaa44",
+        "dio-human": "#d0d8e0",
+        "dio-timestamp": "#8899bb",
+        # Buttons
+        "dio-btn-danger": "#bb5555",
+        "dio-btn-danger-bg": "#662233",
+        "dio-btn-warn": "#bbaa44",
+        "dio-btn-warn-bg": "#665522",
+        "dio-btn-muted": "#7788aa",
+        "dio-btn-muted-bg": "#334455",
+        "dio-btn-kill": "#dd5555",
+        "dio-btn-kill-bg": "#662233",
+        # UI chrome
+        "dio-panel-bg": "#151c2e",
+        "dio-hint-bg": "#101828",
+        # Tabs
+        "dio-tab1": "#4488cc",
+        "dio-tab1-bg": "#151c2e",
+        "dio-tab2": "#5588dd",
+        "dio-tab2-bg": "#14183a",
+        "dio-tab3": "#8866cc",
+        "dio-tab3-bg": "#1c1430",
+        # LCMSpy bandwidth gradient
+        "dio-bw-low": "#4488cc",
+        "dio-bw-high": "#ccaa44",
+        # Dtop
+        "dio-label": "#aabbcc",
+        "dio-stale": "#404860",
+        "dio-pid": "#667788",
+        # Debug
+        "dio-debug-key": "#a0b8d0",
+        "dio-debug-action": "#ccaa44",
+        "dio-debug-focus": "#5588dd",
     },
-    "ember": {
-        "dui-bg": "#120c0a",
-        "dui-fg": "#e0c8b0",
-        "dui-text": "#e0c8b0",
-        "dui-dim": "#4a3028",
-        "dui-accent": "#ee8844",
-        "dui-border": "#ee8844",
-        "dui-yellow": "#ddaa33",
-        "dui-red": "#dd4433",
-        "dui-green": "#88aa44",
-        "dui-blue": "#cc8844",
-        "dui-purple": "#cc6688",
-        "dui-agent": "#aacc66",
-        "dui-tool": "#ee8844",
-        "dui-tool-result": "#ddaa33",
-        "dui-human": "#e8d8c8",
-        "dui-timestamp": "#aa9080",
-        "dui-header": "#ff8844",
-        "dui-panel-bg": "#2a1810",
-        "dui-hint-bg": "#1a1210",
-        "dui-tab1": "#ee8844",
-        "dui-tab1-bg": "#2a1810",
-        "dui-tab2": "#cc8844",
-        "dui-tab2-bg": "#2a2010",
-        "dui-tab3": "#cc6688",
-        "dui-tab3-bg": "#2a1420",
-    },
-    "forest": {
-        "dui-bg": "#0a100c",
-        "dui-fg": "#b0d0b8",
-        "dui-text": "#b0d0b8",
-        "dui-dim": "#2a3a2e",
-        "dui-accent": "#44cc88",
-        "dui-border": "#44cc88",
-        "dui-yellow": "#aacc44",
-        "dui-red": "#cc4444",
-        "dui-green": "#44cc88",
-        "dui-blue": "#44aa99",
-        "dui-purple": "#88aa66",
-        "dui-agent": "#66dd88",
-        "dui-tool": "#44cc88",
-        "dui-tool-result": "#aacc44",
-        "dui-human": "#d0e0d0",
-        "dui-timestamp": "#80aa88",
-        "dui-header": "#88cc44",
-        "dui-panel-bg": "#142a1a",
-        "dui-hint-bg": "#101a14",
-        "dui-tab1": "#44cc88",
-        "dui-tab1-bg": "#142a1a",
-        "dui-tab2": "#44aa99",
-        "dui-tab2-bg": "#142a26",
-        "dui-tab3": "#88aa66",
-        "dui-tab3-bg": "#1e2a14",
+    "light": {
+        # Core
+        "dio-bg": "#f0f2f5",
+        "dio-fg": "#1a1a2e",
+        "dio-text": "#1a1a2e",
+        "dio-dim": "#999999",
+        "dio-accent": "#0077aa",
+        "dio-accent2": "#cc6600",
+        # Named palette
+        "dio-red": "#cc2222",
+        "dio-orange": "#cc6600",
+        "dio-yellow": "#aa8800",
+        "dio-green": "#228844",
+        "dio-blue": "#2266cc",
+        "dio-purple": "#7744aa",
+        "dio-cyan": "#0077aa",
+        "dio-white": "#1a1a2e",
+        "dio-grey": "#666666",
+        # Chat message colors
+        "dio-agent": "#227744",
+        "dio-tool": "#0077aa",
+        "dio-tool-result": "#886600",
+        "dio-human": "#1a1a2e",
+        "dio-timestamp": "#555555",
+        # Buttons
+        "dio-btn-danger": "#cc2222",
+        "dio-btn-danger-bg": "#ffdddd",
+        "dio-btn-warn": "#aa7700",
+        "dio-btn-warn-bg": "#fff3dd",
+        "dio-btn-muted": "#555555",
+        "dio-btn-muted-bg": "#dddddd",
+        "dio-btn-kill": "#ee2222",
+        "dio-btn-kill-bg": "#ffdddd",
+        # UI chrome
+        "dio-panel-bg": "#e4e8ee",
+        "dio-hint-bg": "#dde0e6",
+        # Tabs
+        "dio-tab1": "#0077aa",
+        "dio-tab1-bg": "#ddeef8",
+        "dio-tab2": "#2266cc",
+        "dio-tab2-bg": "#dde0f8",
+        "dio-tab3": "#7744aa",
+        "dio-tab3-bg": "#eeddf8",
+        # LCMSpy bandwidth gradient
+        "dio-bw-low": "#0077aa",
+        "dio-bw-high": "#aa8800",
+        # Dtop
+        "dio-label": "#333333",
+        "dio-stale": "#aaaaaa",
+        "dio-pid": "#666666",
+        # Debug
+        "dio-debug-key": "#1a1a2e",
+        "dio-debug-action": "#aa8800",
+        "dio-debug-focus": "#2266cc",
     },
 }
 
 # Textual Theme constructor args for each theme
 _THEME_BASES: dict[str, dict[str, object]] = {
-    "dark": {
+    "dark-one": {
         "primary": "#00eeee",
         "secondary": "#5c9ff0",
         "warning": "#ffcc00",
@@ -197,7 +262,7 @@ _THEME_BASES: dict[str, dict[str, object]] = {
         "panel": "#1a2a2a",
         "dark": True,
     },
-    "midnight": {
+    "dark-two": {
         "primary": "#4488cc",
         "secondary": "#5588dd",
         "warning": "#ccaa44",
@@ -210,36 +275,23 @@ _THEME_BASES: dict[str, dict[str, object]] = {
         "panel": "#151c2e",
         "dark": True,
     },
-    "ember": {
-        "primary": "#ee8844",
-        "secondary": "#cc8844",
-        "warning": "#ddaa33",
-        "error": "#dd4433",
-        "success": "#88aa44",
-        "accent": "#ee8844",
-        "foreground": "#e0c8b0",
-        "background": "#120c0a",
-        "surface": "#120c0a",
-        "panel": "#2a1810",
-        "dark": True,
-    },
-    "forest": {
-        "primary": "#44cc88",
-        "secondary": "#44aa99",
-        "warning": "#aacc44",
-        "error": "#cc4444",
-        "success": "#44cc88",
-        "accent": "#44cc88",
-        "foreground": "#b0d0b8",
-        "background": "#0a100c",
-        "surface": "#0a100c",
-        "panel": "#142a1a",
-        "dark": True,
+    "light": {
+        "primary": "#0077aa",
+        "secondary": "#2266cc",
+        "warning": "#aa8800",
+        "error": "#cc2222",
+        "success": "#228844",
+        "accent": "#0077aa",
+        "foreground": "#1a1a2e",
+        "background": "#f0f2f5",
+        "surface": "#f0f2f5",
+        "panel": "#e4e8ee",
+        "dark": False,
     },
 }
 
 THEME_NAMES: list[str] = list(_THEME_VARIABLES)
-DEFAULT_THEME = "dark"
+DEFAULT_THEME = "dark-one"
 
 
 def get_textual_themes() -> list[object]:
@@ -290,39 +342,70 @@ def _apply_vars(v: dict[str, str]) -> None:
     """Update module-level constants from a CSS-variable dict."""
     import dimos.utils.cli.theme as _self
 
-    _self.BACKGROUND = v["dui-bg"]
-    _self.BG = v["dui-bg"]
-    _self.FOREGROUND = v["dui-fg"]
-    _self.ACCENT = v["dui-text"]
-    _self.DIM = v["dui-dim"]
-    _self.CYAN = v["dui-accent"]
-    _self.BORDER = v["dui-border"]
-    _self.YELLOW = v["dui-yellow"]
-    _self.RED = v["dui-red"]
-    _self.GREEN = v["dui-green"]
-    _self.BLUE = v["dui-blue"]
-    _self.PURPLE = v.get("dui-purple", v["dui-accent"])
-    _self.AGENT = v["dui-agent"]
-    _self.TOOL = v["dui-tool"]
-    _self.TOOL_RESULT = v["dui-tool-result"]
-    _self.HUMAN = v["dui-human"]
-    _self.TIMESTAMP = v["dui-timestamp"]
-    _self.SYSTEM = v["dui-red"]
-    _self.SUCCESS = v["dui-green"]
-    _self.ERROR = v["dui-red"]
-    _self.WARNING = v["dui-yellow"]
-    _self.INFO = v["dui-accent"]
-    _self.BLACK = v["dui-bg"]
-    _self.WHITE = v["dui-fg"]
-    _self.BRIGHT_BLACK = v["dui-dim"]
-    _self.BRIGHT_WHITE = v["dui-timestamp"]
-    _self.CURSOR = v["dui-accent"]
-    _self.BRIGHT_RED = v["dui-red"]
-    _self.BRIGHT_GREEN = v["dui-green"]
-    _self.BRIGHT_YELLOW = v.get("dui-yellow", "#f2ea8c")
-    _self.BRIGHT_BLUE = v.get("dui-blue", "#8cbdf2")
-    _self.BRIGHT_PURPLE = v.get("dui-purple", v["dui-accent"])
-    _self.BRIGHT_CYAN = v["dui-accent"]
+    # Core
+    _self.BACKGROUND = v["dio-bg"]
+    _self.BG = v["dio-bg"]
+    _self.FOREGROUND = v["dio-fg"]
+    _self.ACCENT = v["dio-text"]
+    _self.DIM = v["dio-dim"]
+    _self.CYAN = v["dio-accent"]
+    _self.BORDER = v["dio-accent"]
+
+    # Named palette
+    _self.RED = v["dio-red"]
+    _self.ORANGE = v["dio-orange"]
+    _self.YELLOW = v["dio-yellow"]
+    _self.GREEN = v["dio-green"]
+    _self.BLUE = v["dio-blue"]
+    _self.PURPLE = v["dio-purple"]
+    _self.WHITE = v["dio-white"]
+    _self.GREY = v["dio-grey"]
+
+    # Chat
+    _self.AGENT = v["dio-agent"]
+    _self.TOOL = v["dio-tool"]
+    _self.TOOL_RESULT = v["dio-tool-result"]
+    _self.HUMAN = v["dio-human"]
+    _self.TIMESTAMP = v["dio-timestamp"]
+
+    # Semantic aliases
+    _self.SYSTEM = v["dio-red"]
+    _self.SUCCESS = v["dio-green"]
+    _self.ERROR = v["dio-red"]
+    _self.WARNING = v["dio-yellow"]
+    _self.INFO = v["dio-accent"]
+
+    # Legacy compat
+    _self.BLACK = v["dio-bg"]
+    _self.BRIGHT_BLACK = v["dio-dim"]
+    _self.BRIGHT_WHITE = v["dio-white"]
+    _self.CURSOR = v["dio-accent"]
+    _self.BRIGHT_RED = v["dio-red"]
+    _self.BRIGHT_GREEN = v["dio-green"]
+    _self.BRIGHT_YELLOW = v["dio-yellow"]
+    _self.BRIGHT_BLUE = v["dio-blue"]
+    _self.BRIGHT_PURPLE = v["dio-purple"]
+    _self.BRIGHT_CYAN = v["dio-accent"]
+
+    # Button colors (available as Python constants for inline Rich markup)
+    _self.BTN_DANGER = v["dio-btn-danger"]
+    _self.BTN_DANGER_BG = v["dio-btn-danger-bg"]
+    _self.BTN_WARN = v["dio-btn-warn"]
+    _self.BTN_WARN_BG = v["dio-btn-warn-bg"]
+    _self.BTN_MUTED = v["dio-btn-muted"]
+    _self.BTN_MUTED_BG = v["dio-btn-muted-bg"]
+    _self.BTN_KILL = v["dio-btn-kill"]
+    _self.BTN_KILL_BG = v["dio-btn-kill-bg"]
+
+    # Dtop
+    _self.LABEL_COLOR = v["dio-label"]
+    _self.STALE_COLOR = v["dio-stale"]
+    _self.PID_COLOR = v["dio-pid"]
+
+    # Debug
+    _self.DEBUG_KEY = v["dio-debug-key"]
+    _self.DEBUG_ACTION = v["dio-debug-action"]
+    _self.DEBUG_FOCUS = v["dio-debug-focus"]
 
 
 # ---------------------------------------------------------------------------
@@ -332,12 +415,14 @@ def _apply_vars(v: dict[str, str]) -> None:
 # Base color palette
 BLACK = COLORS.get("black", "#0b0f0f")
 RED = COLORS.get("red", "#ff0000")
+ORANGE = "#ff8800"
 GREEN = COLORS.get("green", "#00eeee")
 YELLOW = COLORS.get("yellow", "#ffcc00")
 BLUE = COLORS.get("blue", "#5c9ff0")
 PURPLE = COLORS.get("purple", "#00eeee")
 CYAN = COLORS.get("cyan", "#00eeee")
 WHITE = COLORS.get("white", "#b5e4f4")
+GREY = "#777777"
 
 # Bright colors
 BRIGHT_BLACK = COLORS.get("bright-black", "#404040")
@@ -373,6 +458,26 @@ SUCCESS = COLORS.get("success", "#00eeee")
 ERROR = COLORS.get("error", "#ff0000")
 WARNING = COLORS.get("warning", "#ffcc00")
 INFO = COLORS.get("info", "#00eeee")
+
+# Button colors
+BTN_DANGER = "#cc4444"
+BTN_DANGER_BG = "#882222"
+BTN_WARN = "#ccaa00"
+BTN_WARN_BG = "#886600"
+BTN_MUTED = "#8899aa"
+BTN_MUTED_BG = "#445566"
+BTN_KILL = "#ff4444"
+BTN_KILL_BG = "#882222"
+
+# Dtop colors
+LABEL_COLOR = "#cccccc"
+STALE_COLOR = "#606060"
+PID_COLOR = "#777777"
+
+# Debug colors
+DEBUG_KEY = "#b5e4f4"
+DEBUG_ACTION = "#ffcc00"
+DEBUG_FOCUS = "#5c9ff0"
 
 ascii_logo = """
    ▇▇▇▇▇▇╗ ▇▇╗▇▇▇╗   ▇▇▇╗▇▇▇▇▇▇▇╗▇▇▇╗   ▇▇╗▇▇▇▇▇▇▇╗▇▇╗ ▇▇▇▇▇▇╗ ▇▇▇╗   ▇▇╗ ▇▇▇▇▇╗ ▇▇╗

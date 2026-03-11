@@ -24,15 +24,15 @@ class ConfirmScreen(ModalScreen[bool]):
         width: 60;
         height: auto;
         max-height: 20;
-        border: solid #00eeee;
-        background: #0b0f0f;
+        border: solid $dio-accent;
+        background: $dio-bg;
         padding: 1 2;
     }
 
     ConfirmScreen > Vertical > Label {
         width: 100%;
         content-align: center middle;
-        color: #b5e4f4;
+        color: $dio-text;
         margin-bottom: 1;
     }
 
@@ -45,21 +45,21 @@ class ConfirmScreen(ModalScreen[bool]):
         margin: 0 2;
         min-width: 14;
         background: transparent;
-        color: #404040;
+        color: $dio-dim;
         border: none;
     }
 
     ConfirmScreen Button:focus {
-        background: #00eeee;
-        color: #0b0f0f;
-        border: solid #00eeee;
+        background: $dio-accent;
+        color: $dio-bg;
+        border: solid $dio-accent;
         text-style: bold;
     }
 
     ConfirmScreen Button:hover {
-        background: #00cccc;
-        color: #0b0f0f;
-        border: solid #00eeee;
+        background: $dio-accent;
+        color: $dio-bg;
+        border: solid $dio-accent;
     }
     """
 
@@ -128,20 +128,20 @@ class SudoScreen(ModalScreen[bool]):
         width: 50;
         height: auto;
         max-height: 14;
-        border: solid #ffcc00;
-        background: #0b0f0f;
+        border: solid $dio-yellow;
+        background: $dio-bg;
         padding: 1 2;
     }
 
     SudoScreen > Vertical > Label {
         width: 100%;
         content-align: center middle;
-        color: #b5e4f4;
+        color: $dio-text;
         margin-bottom: 1;
     }
 
     SudoScreen > Vertical > #sudo-error {
-        color: #ff0000;
+        color: $dio-red;
         width: 100%;
         content-align: center middle;
         margin-top: 1;

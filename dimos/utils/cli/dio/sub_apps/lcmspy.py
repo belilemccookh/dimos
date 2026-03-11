@@ -22,7 +22,7 @@ from rich.text import Text
 from textual.widgets import DataTable
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -34,17 +34,17 @@ class LCMSpySubApp(SubApp):
     DEFAULT_CSS = """
     LCMSpySubApp {
         layout: vertical;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     LCMSpySubApp DataTable {
         height: 1fr;
         width: 1fr;
-        border: solid $dui-dim;
-        background: $dui-bg;
+        border: solid $dio-dim;
+        background: $dio-bg;
         scrollbar-size: 0 0;
     }
     LCMSpySubApp DataTable > .datatable--header {
-        color: $dui-text;
+        color: $dio-text;
         background: transparent;
     }
     """

@@ -100,6 +100,12 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
             self._stats_monitor = StatsMonitor(self._client)
             self._stats_monitor.start()
 
+    def restart_daemon_threads(self) -> None:
+        """Re-start threads that were killed by os.fork() during daemonize."""
+        if self._stats_monitor is not None:
+            logger.info("Restarting StatsMonitor after daemonize")
+            self._stats_monitor.start()
+
     def stop(self) -> None:
         if self._stats_monitor is not None:
             self._stats_monitor.stop()

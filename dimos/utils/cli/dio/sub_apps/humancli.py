@@ -29,7 +29,7 @@ from textual.geometry import Size
 from textual.widgets import Input, RichLog, Static
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dui.sub_app import SubApp
+from dimos.utils.cli.dio.sub_app import SubApp
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -128,14 +128,14 @@ class HumanCLISubApp(SubApp):
     DEFAULT_CSS = """
     HumanCLISubApp {
         layout: vertical;
-        background: $dui-bg;
+        background: $dio-bg;
     }
     HumanCLISubApp #hcli-status-bar {
         height: 1;
         dock: top;
         padding: 0 1;
-        background: $dui-bg;
-        color: $dui-dim;
+        background: $dio-bg;
+        color: $dio-dim;
     }
     HumanCLISubApp #hcli-chat {
         height: 1fr;
@@ -143,7 +143,7 @@ class HumanCLISubApp(SubApp):
     HumanCLISubApp RichLog {
         height: 1fr;
         scrollbar-size: 0 0;
-        border: solid $dui-dim;
+        border: solid $dio-dim;
     }
     HumanCLISubApp Input {
         dock: bottom;
