@@ -1,3 +1,17 @@
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Runner sub-app — blueprint launcher with log viewer."""
 
 from __future__ import annotations
@@ -7,14 +21,16 @@ import signal
 import subprocess
 import sys
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, Input, Label, ListItem, ListView, RichLog, Static
 
 from dimos.utils.cli import theme
 from dimos.utils.cli.dui.sub_app import SubApp
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class RunnerSubApp(SubApp):
@@ -116,6 +132,18 @@ class RunnerSubApp(SubApp):
         color: #ffffff;
         border: solid #44aacc;
     }}
+    RunnerSubApp #btn-open-log {{
+        border: solid #445566;
+        color: #8899aa;
+    }}
+    RunnerSubApp #btn-open-log:hover {{
+        border: solid #8899aa;
+    }}
+    RunnerSubApp #btn-open-log:focus {{
+        background: #445566;
+        color: #ffffff;
+        border: solid #8899aa;
+    }}
     """
 
     def __init__(self) -> None:
@@ -136,6 +164,7 @@ class RunnerSubApp(SubApp):
         with Horizontal(classes="run-controls", id="run-controls"):
             yield Button("Stop", id="btn-stop", variant="error")
             yield Button("Restart", id="btn-restart", variant="warning")
+            yield Button("Open Log File", id="btn-open-log")
             yield Button("Pick Blueprint", id="btn-pick")
         yield Static("", id="runner-status", classes="status-bar")
 
@@ -239,14 +268,13 @@ class RunnerSubApp(SubApp):
         self.query_one("#run-controls").styles.display = "block"
         self.query_one("#btn-stop").styles.display = "block"
         self.query_one("#btn-restart").styles.display = "block"
+        self.query_one("#btn-open-log").styles.display = "block"
         self.query_one("#btn-pick").styles.display = "none"
         self.query_one("#btn-stop", Button).focus()
         entry = self._running_entry
         if entry:
             status = self.query_one("#runner-status", Static)
-            status.update(
-                f"Running: {entry.blueprint} (PID {entry.pid})"
-            )
+            status.update(f"Running: {entry.blueprint} (PID {entry.pid})")
             self._start_log_follow(entry)
 
     def _show_failed_mode(self) -> None:
@@ -257,6 +285,7 @@ class RunnerSubApp(SubApp):
         self.query_one("#run-controls").styles.display = "block"
         self.query_one("#btn-stop").styles.display = "none"
         self.query_one("#btn-restart").styles.display = "none"
+        self.query_one("#btn-open-log").styles.display = "block"
         self.query_one("#btn-pick").styles.display = "block"
         status = self.query_one("#runner-status", Static)
         status.update("Launch failed — pick a blueprint to try again")
@@ -269,7 +298,12 @@ class RunnerSubApp(SubApp):
 
         def _follow() -> None:
             try:
-                from dimos.core.log_viewer import follow_log, format_line, read_log, resolve_log_path
+                from dimos.core.log_viewer import (
+                    follow_log,
+                    format_line,
+                    read_log,
+                    resolve_log_path,
+                )
 
                 path = resolve_log_path(entry.run_id)
                 if not path:
@@ -311,7 +345,7 @@ class RunnerSubApp(SubApp):
     def _get_visible_buttons(self) -> list[Button]:
         """Return the currently visible control buttons in order."""
         buttons: list[Button] = []
-        for bid in ("btn-stop", "btn-restart", "btn-pick"):
+        for bid in ("btn-stop", "btn-restart", "btn-open-log", "btn-pick"):
             try:
                 btn = self.query_one(f"#{bid}", Button)
                 if btn.styles.display != "none":
@@ -433,12 +467,14 @@ class RunnerSubApp(SubApp):
                 rc = proc.returncode
                 if rc != 0:
                     self.app.call_from_thread(
-                        log_widget.write, f"[{theme.YELLOW}]Process exited with code {rc}[/{theme.YELLOW}]"
+                        log_widget.write,
+                        f"[{theme.YELLOW}]Process exited with code {rc}[/{theme.YELLOW}]",
                     )
             except Exception as e:
                 self.app.call_from_thread(log_widget.write, f"[red]Stream error: {e}[/red]")
             finally:
                 self._child_proc = None
+
                 # After the launch command finishes, poll will pick up
                 # the running entry and switch to log-follow mode.
                 def _after() -> None:
@@ -447,6 +483,7 @@ class RunnerSubApp(SubApp):
                         self._show_log_mode()
                     else:
                         self._show_failed_mode()
+
                 self.app.call_from_thread(_after)
 
         threading.Thread(target=_stream_output, daemon=True).start()
@@ -456,6 +493,8 @@ class RunnerSubApp(SubApp):
             self._stop_running()
         elif event.button.id == "btn-restart":
             self._restart_running()
+        elif event.button.id == "btn-open-log":
+            self._open_log_in_editor()
         elif event.button.id == "btn-pick":
             self._go_to_list()
 
@@ -498,7 +537,9 @@ class RunnerSubApp(SubApp):
                     from dimos.core.run_registry import stop_entry
 
                     msg, _ = stop_entry(entry)
-                    self.app.call_from_thread(log_widget.write, f"[{theme.YELLOW}]{msg}[/{theme.YELLOW}]")
+                    self.app.call_from_thread(
+                        log_widget.write, f"[{theme.YELLOW}]{msg}[/{theme.YELLOW}]"
+                    )
                 except Exception as e:
                     self.app.call_from_thread(log_widget.write, f"[red]Stop error: {e}[/red]")
 
@@ -528,18 +569,25 @@ class RunnerSubApp(SubApp):
             self._stop_running(then_launch=name)
 
     def _open_log_in_editor(self) -> None:
-        entry = self._running_entry
-        if not entry:
-            return
         try:
             from dimos.core.log_viewer import resolve_log_path
 
-            path = resolve_log_path(entry.run_id)
-            if path:
-                editor = os.environ.get("EDITOR", "vi")
-                self.app.suspend()
-                os.system(f"{editor} {path}")
-                self.app.resume()
+            # Try the running entry first, then fall back to most recent
+            entry = self._running_entry
+            if entry:
+                path = resolve_log_path(entry.run_id)
+            else:
+                path = resolve_log_path()  # resolves most recent
+
+            if not path:
+                log_widget = self.query_one("#runner-log", RichLog)
+                log_widget.write("[dim]No log file found[/dim]")
+                return
+
+            editor = os.environ.get("EDITOR", "vi")
+            self.app.suspend()
+            os.system(f"{editor} {path}")
+            self.app.resume()
         except Exception:
             pass
 
