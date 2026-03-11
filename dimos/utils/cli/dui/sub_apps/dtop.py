@@ -31,6 +31,7 @@ class DtopSubApp(SubApp):
     DEFAULT_CSS = f"""
     DtopSubApp {{
         layout: vertical;
+        height: 1fr;
         background: {theme.BACKGROUND};
     }}
     DtopSubApp VerticalScroll {{
@@ -56,9 +57,20 @@ class DtopSubApp(SubApp):
         self._last_msg_time: float = 0.0
         self._cpu_history: dict[str, deque[float]] = {}
 
+    def _waiting_panel(self) -> Panel:
+        return Panel(
+            Text(
+                "Waiting for resource stats...\nuse `dimos --dtop ...` to emit stats",
+                style=theme.FOREGROUND,
+                justify="center",
+            ),
+            border_style=theme.CYAN,
+            expand=False,
+        )
+
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="dtop-scroll"):
-            yield Static(id="dtop-panels")
+        with VerticalScroll(id="dtop-scroll", classes="waiting"):
+            yield Static(self._waiting_panel(), id="dtop-panels")
 
     def get_focus_target(self) -> object | None:
         """Return the VerticalScroll for focus."""
@@ -106,16 +118,7 @@ class DtopSubApp(SubApp):
             return
         if data is None:
             scroll.add_class("waiting")
-            waiting = Panel(
-                Text(
-                    "Waiting for resource stats...\nuse `dimos --dtop ...` to emit stats",
-                    style=theme.FOREGROUND,
-                    justify="center",
-                ),
-                border_style=theme.CYAN,
-                expand=False,
-            )
-            self.query_one("#dtop-panels", Static).update(waiting)
+            self.query_one("#dtop-panels", Static).update(self._waiting_panel())
             return
         scroll.remove_class("waiting")
 

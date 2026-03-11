@@ -12,19 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Runner sub-app — blueprint launcher with log viewer."""
+"""Status sub-app — log viewer and blueprint lifecycle controls."""
 
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import sys
 import threading
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from textual.containers import Horizontal
-from textual.widgets import Button, Input, Label, ListItem, ListView, RichLog, Static
+from rich.panel import Panel
+from rich.text import Text
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import Button, RichLog, Static
 
 from dimos.utils.cli import theme
 from dimos.utils.cli.dui.sub_app import SubApp
@@ -33,113 +36,106 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 
-class RunnerSubApp(SubApp):
-    TITLE = "runner"
+def _launch_log_path() -> Path:
+    """Well-known path for launch stdout/stderr (shared with launcher)."""
+    xdg = os.environ.get("XDG_STATE_HOME")
+    base = Path(xdg) / "dimos" if xdg else Path.home() / ".local" / "state" / "dimos"
+    return base / "launch.log"
+
+
+class StatusSubApp(SubApp):
+    TITLE = "status"
 
     DEFAULT_CSS = f"""
-    RunnerSubApp {{
+    StatusSubApp {{
         layout: vertical;
+        height: 1fr;
         background: {theme.BACKGROUND};
     }}
-    RunnerSubApp .subapp-header {{
+    StatusSubApp .subapp-header {{
         width: 100%;
         height: auto;
         color: #ff8800;
         padding: 1 2;
         text-style: bold;
     }}
-    RunnerSubApp #runner-filter {{
-        width: 100%;
-        margin: 0 0 0 0;
-        background: {theme.BACKGROUND};
-        border: solid {theme.DIM};
-        color: {theme.ACCENT};
-    }}
-    RunnerSubApp #runner-filter:focus {{
-        border: solid {theme.CYAN};
-    }}
-    RunnerSubApp ListView {{
-        height: 1fr;
-        background: {theme.BACKGROUND};
-    }}
-    RunnerSubApp ListView > ListItem {{
-        background: {theme.BACKGROUND};
-        color: {theme.ACCENT};
-        padding: 1 2;
-    }}
-    RunnerSubApp ListView > ListItem.--highlight {{
-        background: #1a2a2a;
-    }}
-    RunnerSubApp RichLog {{
+    StatusSubApp RichLog {{
         height: 1fr;
         background: {theme.BACKGROUND};
         border: solid {theme.DIM};
         scrollbar-size: 0 0;
     }}
-    RunnerSubApp .run-controls {{
-        dock: bottom;
+    StatusSubApp #idle-container {{
+        height: 1fr;
+        align: center middle;
+    }}
+    StatusSubApp #idle-panel {{
+        width: auto;
+        background: transparent;
+    }}
+    StatusSubApp #run-controls {{
         height: auto;
         padding: 0 1;
         background: {theme.BACKGROUND};
     }}
-    RunnerSubApp .status-bar {{
-        height: 1;
-        dock: bottom;
-        background: #1a2020;
-        color: {theme.DIM};
-        padding: 0 1;
-    }}
-    RunnerSubApp .run-controls Button {{
+    StatusSubApp #run-controls Button {{
         margin: 0 1 0 0;
         min-width: 12;
         background: transparent;
         border: solid {theme.DIM};
         color: {theme.ACCENT};
     }}
-    RunnerSubApp #btn-stop {{
+    StatusSubApp .status-bar {{
+        height: 1;
+        dock: bottom;
+        background: #1a2020;
+        color: {theme.DIM};
+        padding: 0 1;
+    }}
+    StatusSubApp #btn-stop {{
         border: solid #882222;
         color: #cc4444;
     }}
-    RunnerSubApp #btn-stop:hover {{
+    StatusSubApp #btn-stop:hover {{
         border: solid #cc4444;
     }}
-    RunnerSubApp #btn-stop:focus {{
+    StatusSubApp #btn-stop:focus {{
         background: #882222;
         color: #ffffff;
         border: solid #cc4444;
     }}
-    RunnerSubApp #btn-restart {{
+    StatusSubApp #btn-sudo-kill {{
+        border: solid #882222;
+        color: #ff4444;
+    }}
+    StatusSubApp #btn-sudo-kill:hover {{
+        border: solid #ff4444;
+    }}
+    StatusSubApp #btn-sudo-kill:focus {{
+        background: #882222;
+        color: #ffffff;
+        border: solid #ff4444;
+    }}
+    StatusSubApp #btn-restart {{
         border: solid #886600;
         color: #ccaa00;
     }}
-    RunnerSubApp #btn-restart:hover {{
+    StatusSubApp #btn-restart:hover {{
         border: solid #ccaa00;
     }}
-    RunnerSubApp #btn-restart:focus {{
+    StatusSubApp #btn-restart:focus {{
         background: #886600;
         color: #ffffff;
         border: solid #ccaa00;
     }}
-    RunnerSubApp #btn-pick {{
-        border: solid #226688;
-        color: #44aacc;
-    }}
-    RunnerSubApp #btn-pick:hover {{
-        border: solid #44aacc;
-    }}
-    RunnerSubApp #btn-pick:focus {{
-        background: #226688;
-        color: #ffffff;
-        border: solid #44aacc;
-    }}
-    RunnerSubApp #btn-open-log {{
+    StatusSubApp #btn-open-log {{
         border: solid #445566;
         color: #8899aa;
     }}
-    RunnerSubApp #btn-open-log:hover {{
+    StatusSubApp #btn-open-log:hover {{
         border: solid #8899aa;
     }}
-    RunnerSubApp #btn-open-log:focus {{
+    StatusSubApp #btn-open-log:focus {{
         background: #445566;
         color: #ffffff;
         border: solid #8899aa;
@@ -151,45 +147,52 @@ class RunnerSubApp(SubApp):
         self._running_entry: Any = None
         self._log_thread: threading.Thread | None = None
         self._stop_log = False
-        self._blueprints: list[str] = []
-        self._filtered: list[str] = []
-        self._child_proc: subprocess.Popen[str] | None = None
-        self._launched_name: str | None = None
+        self._failed_stop_pid: int | None = None
+        self._following_launch_log = False
+        self._launch_log_mtime: float = 0.0
 
     def compose(self) -> ComposeResult:
-        yield Static("Blueprint Runner", classes="subapp-header")
-        yield Input(placeholder="Type to filter blueprints...", id="runner-filter")
-        yield ListView(id="blueprint-list")
+        yield Static("Blueprint Status", classes="subapp-header")
+        with VerticalScroll(id="idle-container"):
+            yield Static(self._idle_panel(), id="idle-panel")
         yield RichLog(id="runner-log", markup=True, wrap=True)
-        with Horizontal(classes="run-controls", id="run-controls"):
+        with Horizontal(id="run-controls"):
             yield Button("Stop", id="btn-stop", variant="error")
+            yield Button("Force Kill (sudo)", id="btn-sudo-kill")
             yield Button("Restart", id="btn-restart", variant="warning")
             yield Button("Open Log File", id="btn-open-log")
-            yield Button("Pick Blueprint", id="btn-pick")
         yield Static("", id="runner-status", classes="status-bar")
+
+    def _idle_panel(self) -> Panel:
+        msg = Text(justify="center")
+        msg.append("No Blueprint Running\n\n", style="bold #cc4444")
+        msg.append("Use the ", style=theme.DIM)
+        msg.append("launch", style=f"bold {theme.CYAN}")
+        msg.append(" tab to start a blueprint", style=theme.DIM)
+        return Panel(msg, border_style=theme.DIM, expand=False)
 
     def on_mount_subapp(self) -> None:
         self._check_running()
-        if self._running_entry is None:
-            self._populate_blueprints()
-            self._show_list_mode()
+        if self._running_entry is not None:
+            self._show_running()
         else:
-            self._show_log_mode()
-        # Poll the run registry so we can re-attach to blueprints
-        # launched (or stopped) from another terminal.
-        self.set_interval(2.0, self._poll_running)
+            # Check if there's a fresh launch log to tail
+            self._check_launch_log()
+            if not self._following_launch_log:
+                self._show_idle()
+        self.set_interval(1.0, self._poll_running)
 
     def get_focus_target(self) -> object | None:
-        """Return the widget that should receive focus."""
         if self._running_entry is not None:
             try:
                 return self.query_one("#runner-log", RichLog)
             except Exception:
                 pass
-        try:
-            return self.query_one("#runner-filter", Input)
-        except Exception:
-            return super().get_focus_target()
+        return super().get_focus_target()
+
+    # ------------------------------------------------------------------
+    # State management
+    # ------------------------------------------------------------------
 
     def _check_running(self) -> None:
         try:
@@ -200,7 +203,6 @@ class RunnerSubApp(SubApp):
             self._running_entry = None
 
     def _poll_running(self) -> None:
-        """Periodically check the run registry for state changes."""
         old_entry = self._running_entry
         self._check_running()
         new_entry = self._running_entry
@@ -208,88 +210,131 @@ class RunnerSubApp(SubApp):
         old_id = getattr(old_entry, "run_id", None)
         new_id = getattr(new_entry, "run_id", None)
 
-        if old_id == new_id:
-            return
+        if old_id != new_id:
+            if new_entry is not None:
+                # A daemon appeared — switch from launch log to JSONL follow
+                self._stop_log = True
+                self._following_launch_log = False
+                self._show_running()
+                return
+            elif old_entry is not None:
+                # Process ended
+                self._stop_log = True
+                self._following_launch_log = False
+                self._show_stopped("Process ended")
+                return
 
-        if new_entry is not None and old_entry is None:
-            self._stop_log = True
-            self._show_log_mode()
-        elif new_entry is None and old_entry is not None:
-            self._stop_log = True
-            self._populate_blueprints()
-            self._show_list_mode()
-            self.query_one("#runner-filter", Input).value = ""
-        else:
-            self._stop_log = True
-            self._show_log_mode()
+        # If nothing is running yet, check for a fresh launch log
+        if new_entry is None and not self._following_launch_log:
+            self._check_launch_log()
 
-    def _populate_blueprints(self) -> None:
+    def _check_launch_log(self) -> None:
+        """Detect a new/updated launch.log and start tailing it."""
+        log_path = _launch_log_path()
         try:
-            from dimos.robot.all_blueprints import all_blueprints
+            mtime = log_path.stat().st_mtime
+        except FileNotFoundError:
+            return
+        # Only pick up if it was modified recently (within 30s) and is newer than last seen
+        if mtime <= self._launch_log_mtime:
+            return
+        if time.time() - mtime > 30:
+            return
+        self._launch_log_mtime = mtime
+        self._following_launch_log = True
+        self._show_launching(log_path)
 
-            self._blueprints = sorted(
-                name for name in all_blueprints if not name.startswith("demo-")
-            )
-        except Exception:
-            self._blueprints = []
-
-        self._filtered = list(self._blueprints)
-        self._rebuild_list()
-
-    def _rebuild_list(self) -> None:
-        lv = self.query_one("#blueprint-list", ListView)
-        lv.clear()
-        for name in self._filtered:
-            lv.append(ListItem(Label(name)))
-        if self._filtered:
-            lv.index = 0
-
-    def _apply_filter(self, query: str) -> None:
-        q = query.strip().lower()
-        if not q:
-            self._filtered = list(self._blueprints)
-        else:
-            self._filtered = [n for n in self._blueprints if q in n.lower()]
-        self._rebuild_list()
-
-    def _show_list_mode(self) -> None:
-        self.query_one("#runner-filter").styles.display = "block"
-        self.query_one("#blueprint-list").styles.display = "block"
-        self.query_one("#runner-log").styles.display = "none"
+    def _show_launching(self, log_path: Path) -> None:
+        """Show the launch log output while the daemon is starting."""
+        self.query_one("#idle-container").styles.display = "none"
+        self.query_one("#runner-log").styles.display = "block"
         self.query_one("#run-controls").styles.display = "none"
-        self.query_one("#btn-pick").styles.display = "none"
         status = self.query_one("#runner-status", Static)
-        status.update("Up/Down: navigate | Enter: run | Type to filter")
+        status.update("Launching blueprint...")
 
-    def _show_log_mode(self) -> None:
-        self.query_one("#runner-filter").styles.display = "none"
-        self.query_one("#blueprint-list").styles.display = "none"
+        self._stop_log = False
+        log_widget = self.query_one("#runner-log", RichLog)
+        log_widget.clear()
+
+        def _tail() -> None:
+            try:
+                with open(log_path) as f:
+                    while not self._stop_log:
+                        line = f.readline()
+                        if line:
+                            rendered = Text.from_ansi(line.rstrip("\n"))
+                            self.app.call_from_thread(log_widget.write, rendered)
+                        else:
+                            time.sleep(0.2)
+                            # Check if the launch process finished (file stopped growing)
+                            # and a daemon entry appeared — poll handles the transition
+            except Exception as e:
+                self.app.call_from_thread(log_widget.write, f"[red]Error reading launch log: {e}[/red]")
+
+        self._log_thread = threading.Thread(target=_tail, daemon=True)
+        self._log_thread.start()
+
+    def _show_running(self) -> None:
+        """Show controls for a running blueprint."""
+        self.query_one("#idle-container").styles.display = "none"
         self.query_one("#runner-log").styles.display = "block"
         self.query_one("#run-controls").styles.display = "block"
         self.query_one("#btn-stop").styles.display = "block"
+        self.query_one("#btn-sudo-kill").styles.display = "none"
         self.query_one("#btn-restart").styles.display = "block"
         self.query_one("#btn-open-log").styles.display = "block"
-        self.query_one("#btn-pick").styles.display = "none"
-        self.query_one("#btn-stop", Button).focus()
+        self._failed_stop_pid = None
         entry = self._running_entry
         if entry:
             status = self.query_one("#runner-status", Static)
             status.update(f"Running: {entry.blueprint} (PID {entry.pid})")
             self._start_log_follow(entry)
 
-    def _show_failed_mode(self) -> None:
-        """Show log output with only a 'Pick Blueprint' button."""
-        self.query_one("#runner-filter").styles.display = "none"
-        self.query_one("#blueprint-list").styles.display = "none"
+    def _show_stopped(self, message: str = "Stopped") -> None:
+        """Show controls for a stopped state with logs still visible."""
+        self.query_one("#idle-container").styles.display = "none"
         self.query_one("#runner-log").styles.display = "block"
         self.query_one("#run-controls").styles.display = "block"
         self.query_one("#btn-stop").styles.display = "none"
+        self.query_one("#btn-sudo-kill").styles.display = "none"
         self.query_one("#btn-restart").styles.display = "none"
         self.query_one("#btn-open-log").styles.display = "block"
-        self.query_one("#btn-pick").styles.display = "block"
+        self._failed_stop_pid = None
+        self._following_launch_log = False
+        # Reset so the next launch.log write is always detected
+        self._launch_log_mtime = 0.0
         status = self.query_one("#runner-status", Static)
-        status.update("Launch failed — pick a blueprint to try again")
-        self.query_one("#btn-pick", Button).focus()
+        status.update(message)
+
+    def _show_idle(self) -> None:
+        """Show big idle message — no blueprint running."""
+        self.query_one("#idle-container").styles.display = "block"
+        self.query_one("#runner-log").styles.display = "none"
+        self.query_one("#run-controls").styles.display = "none"
+        self._failed_stop_pid = None
+        self._following_launch_log = False
+        self._launch_log_mtime = 0.0
+
+        # Check if there are past logs to show in status bar
+        has_past = False
+        try:
+            from dimos.core.run_registry import get_most_recent
+
+            entry = get_most_recent()
+            if entry:
+                has_past = True
+                status = self.query_one("#runner-status", Static)
+                status.update(f"Last run: {entry.blueprint} (run {entry.run_id})")
+        except Exception:
+            pass
+
+        if not has_past:
+            status = self.query_one("#runner-status", Static)
+            status.update("No blueprint running")
+
+    # ------------------------------------------------------------------
+    # Log streaming
+    # ------------------------------------------------------------------
 
     def _start_log_follow(self, entry: Any) -> None:
         self._stop_log = False
@@ -325,27 +370,36 @@ class RunnerSubApp(SubApp):
         self._log_thread = threading.Thread(target=_follow, daemon=True)
         self._log_thread.start()
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id == "runner-filter":
-            self._apply_filter(event.value)
+    # ------------------------------------------------------------------
+    # Button handling
+    # ------------------------------------------------------------------
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "runner-filter":
-            lv = self.query_one("#blueprint-list", ListView)
-            idx = lv.index
-            if idx is not None and 0 <= idx < len(self._filtered):
-                self._launch_blueprint(self._filtered[idx])
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-stop":
+            self._stop_running()
+        elif event.button.id == "btn-sudo-kill":
+            self._sudo_kill()
+        elif event.button.id == "btn-restart":
+            self._restart_running()
+        elif event.button.id == "btn-open-log":
+            self._open_log_in_editor()
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        lv = self.query_one("#blueprint-list", ListView)
-        idx = lv.index
-        if idx is not None and 0 <= idx < len(self._filtered):
-            self._launch_blueprint(self._filtered[idx])
+    def on_key(self, event: Any) -> None:
+        key = getattr(event, "key", "")
+        if key in ("left", "right"):
+            self._cycle_button_focus(1 if key == "right" else -1)
+            event.prevent_default()
+            event.stop()
+        elif key == "enter":
+            focused = self.app.focused
+            if isinstance(focused, Button):
+                focused.press()
+                event.prevent_default()
+                event.stop()
 
     def _get_visible_buttons(self) -> list[Button]:
-        """Return the currently visible control buttons in order."""
         buttons: list[Button] = []
-        for bid in ("btn-stop", "btn-restart", "btn-open-log", "btn-pick"):
+        for bid in ("btn-stop", "btn-sudo-kill", "btn-restart", "btn-open-log"):
             try:
                 btn = self.query_one(f"#{bid}", Button)
                 if btn.styles.display != "none":
@@ -355,7 +409,6 @@ class RunnerSubApp(SubApp):
         return buttons
 
     def _cycle_button_focus(self, delta: int) -> None:
-        """Move focus among visible control buttons by delta (+1 or -1)."""
         buttons = self._get_visible_buttons()
         if not buttons:
             return
@@ -367,171 +420,26 @@ class RunnerSubApp(SubApp):
             idx = 0
         buttons[idx].focus()
 
-    def on_key(self, event: Any) -> None:
-        key = getattr(event, "key", "")
+    # ------------------------------------------------------------------
+    # Stop / restart / kill
+    # ------------------------------------------------------------------
 
-        # In list mode: arrow keys on filter input move the list selection
-        is_list_mode = (
-            self._running_entry is None
-            and self._child_proc is None
-            and self.query_one("#runner-filter").styles.display != "none"
-        )
-        if is_list_mode:
-            focused = self.app.focused
-            filter_input = self.query_one("#runner-filter", Input)
-            if focused is filter_input and key in ("up", "down"):
-                lv = self.query_one("#blueprint-list", ListView)
-                if self._filtered:
-                    current = lv.index or 0
-                    if key == "up":
-                        lv.index = max(0, current - 1)
-                    else:
-                        lv.index = min(len(self._filtered) - 1, current + 1)
-                event.prevent_default()
-                event.stop()
-                return
-
-        # In log/failed mode: arrow keys navigate between buttons
-        controls_visible = self.query_one("#run-controls").styles.display != "none"
-        if controls_visible and key in ("left", "right"):
-            self._cycle_button_focus(1 if key == "right" else -1)
-            event.prevent_default()
-            event.stop()
-            return
-
-        if controls_visible and key == "enter":
-            focused = self.app.focused
-            if isinstance(focused, Button):
-                focused.press()
-                event.prevent_default()
-                event.stop()
-                return
-
-    def _launch_blueprint(self, name: str) -> None:
-        """Launch a blueprint in a fully detached child process."""
-        log_widget = self.query_one("#runner-log", RichLog)
-        log_widget.clear()
-        # Switch to log view immediately
-        self.query_one("#runner-filter").styles.display = "none"
-        self.query_one("#blueprint-list").styles.display = "none"
-        self.query_one("#runner-log").styles.display = "block"
-        status = self.query_one("#runner-status", Static)
-        status.update(f"Launching {name}...")
-
-        # Gather config overrides on the main thread
-        config_args: list[str] = []
-        try:
-            from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
-
-            for inst in self.app._instances:  # type: ignore[attr-defined]
-                if isinstance(inst, ConfigSubApp):
-                    for k, v in inst.get_overrides().items():
-                        cli_key = k.replace("_", "-")
-                        if isinstance(v, bool):
-                            config_args.append(f"--{cli_key}" if v else f"--no-{cli_key}")
-                        else:
-                            config_args.extend([f"--{cli_key}", str(v)])
-                    break
-        except Exception:
-            pass
-
-        cmd = [sys.executable, "-m", "dimos.robot.cli.dimos", *config_args, "run", "--daemon", name]
-        self._launched_name = name
-        self.query_one("#run-controls").styles.display = "block"
-        log_widget.write(f"[dim]$ {' '.join(cmd)}[/dim]")
-
-        try:
-            # Launch in a fully detached process so it doesn't share
-            # CPU scheduling priority with the TUI event loop.
-            self._child_proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                start_new_session=True,  # detach from our process group
-            )
-        except Exception as e:
-            log_widget.write(f"[red]Launch error: {e}[/red]")
-            return
-
-        # Stream stdout in a background thread
-        proc = self._child_proc
-
-        def _stream_output() -> None:
-            try:
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    self.app.call_from_thread(log_widget.write, line.rstrip("\n"))
-                proc.wait()
-                rc = proc.returncode
-                if rc != 0:
-                    self.app.call_from_thread(
-                        log_widget.write,
-                        f"[{theme.YELLOW}]Process exited with code {rc}[/{theme.YELLOW}]",
-                    )
-            except Exception as e:
-                self.app.call_from_thread(log_widget.write, f"[red]Stream error: {e}[/red]")
-            finally:
-                self._child_proc = None
-
-                # After the launch command finishes, poll will pick up
-                # the running entry and switch to log-follow mode.
-                def _after() -> None:
-                    self._check_running()
-                    if self._running_entry:
-                        self._show_log_mode()
-                    else:
-                        self._show_failed_mode()
-
-                self.app.call_from_thread(_after)
-
-        threading.Thread(target=_stream_output, daemon=True).start()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-stop":
-            self._stop_running()
-        elif event.button.id == "btn-restart":
-            self._restart_running()
-        elif event.button.id == "btn-open-log":
-            self._open_log_in_editor()
-        elif event.button.id == "btn-pick":
-            self._go_to_list()
-
-    def _go_to_list(self) -> None:
-        """Switch back to the blueprint picker."""
-        self._stop_log = True
-        self._running_entry = None
-        self._populate_blueprints()
-        self._show_list_mode()
-        self.query_one("#runner-filter", Input).value = ""
-        self.query_one("#runner-filter", Input).focus()
-
-    def _stop_running(self, *, then_launch: str | None = None) -> None:
+    def _stop_running(self) -> None:
         self._stop_log = True
         log_widget = self.query_one("#runner-log", RichLog)
         status = self.query_one("#runner-status", Static)
         status.update("Stopping blueprint...")
-        # Disable buttons so user can't double-tap
         for bid in ("btn-stop", "btn-restart"):
             try:
                 self.query_one(f"#{bid}", Button).disabled = True
             except Exception:
                 pass
 
-        # Kill the launch subprocess immediately (non-blocking)
-        if self._child_proc is not None:
-            try:
-                self._child_proc.send_signal(signal.SIGTERM)
-                log_widget.write(f"[{theme.YELLOW}]Stopped launch process[/{theme.YELLOW}]")
-            except Exception:
-                pass
-            self._child_proc = None
-
         entry = self._running_entry
         self._running_entry = None
 
         def _do_stop() -> None:
+            permission_error = False
             if entry:
                 try:
                     from dimos.core.run_registry import stop_entry
@@ -540,23 +448,31 @@ class RunnerSubApp(SubApp):
                     self.app.call_from_thread(
                         log_widget.write, f"[{theme.YELLOW}]{msg}[/{theme.YELLOW}]"
                     )
+                except PermissionError:
+                    permission_error = True
+                    self.app.call_from_thread(
+                        log_widget.write,
+                        f"[red]Permission denied — cannot stop PID {entry.pid}[/red]",
+                    )
                 except Exception as e:
+                    if "permission" in str(e).lower() or "operation not permitted" in str(e).lower():
+                        permission_error = True
                     self.app.call_from_thread(log_widget.write, f"[red]Stop error: {e}[/red]")
 
             def _after_stop() -> None:
-                # Re-enable buttons
                 for bid in ("btn-stop", "btn-restart"):
                     try:
                         self.query_one(f"#{bid}", Button).disabled = False
                     except Exception:
                         pass
-                if then_launch:
-                    self._launch_blueprint(then_launch)
+                if permission_error and entry:
+                    self._failed_stop_pid = entry.pid
+                    self.query_one("#btn-sudo-kill").styles.display = "block"
+                    self.query_one("#btn-sudo-kill", Button).focus()
+                    s = self.query_one("#runner-status", Static)
+                    s.update(f"Stop failed (permission denied) — try Force Kill for PID {entry.pid}")
                 else:
-                    self._populate_blueprints()
-                    self._show_list_mode()
-                    self.query_one("#runner-filter", Input).value = ""
-                    self.query_one("#runner-filter", Input).focus()
+                    self._show_stopped("Stopped")
 
             self.app.call_from_thread(_after_stop)
 
@@ -564,20 +480,172 @@ class RunnerSubApp(SubApp):
 
     def _restart_running(self) -> None:
         entry = self._running_entry
-        name = getattr(entry, "blueprint", None) or self._launched_name
-        if name:
-            self._stop_running(then_launch=name)
+        name = getattr(entry, "blueprint", None)
+        if not name:
+            return
+        self._stop_log = True
+        log_widget = self.query_one("#runner-log", RichLog)
+        status = self.query_one("#runner-status", Static)
+        status.update(f"Restarting {name}...")
+        for bid in ("btn-stop", "btn-restart"):
+            try:
+                self.query_one(f"#{bid}", Button).disabled = True
+            except Exception:
+                pass
+
+        old_entry = self._running_entry
+        self._running_entry = None
+
+        def _do_restart() -> None:
+            if old_entry:
+                try:
+                    from dimos.core.run_registry import stop_entry
+                    stop_entry(old_entry)
+                except Exception:
+                    pass
+
+            config_args: list[str] = []
+            try:
+                from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
+                for inst in self.app._instances:  # type: ignore[attr-defined]
+                    if isinstance(inst, ConfigSubApp):
+                        for k, v in inst.get_overrides().items():
+                            cli_key = k.replace("_", "-")
+                            if isinstance(v, bool):
+                                config_args.append(f"--{cli_key}" if v else f"--no-{cli_key}")
+                            else:
+                                config_args.extend([f"--{cli_key}", str(v)])
+                        break
+            except Exception:
+                pass
+
+            cmd = [sys.executable, "-m", "dimos.robot.cli.dimos", *config_args, "run", "--daemon", name]
+            env = os.environ.copy()
+            env["FORCE_COLOR"] = "1"
+            env["PYTHONUNBUFFERED"] = "1"
+            env["TERM"] = env.get("TERM", "xterm-256color")
+            try:
+                log_file = _launch_log_path()
+                with open(log_file, "w") as f:
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.DEVNULL,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        env=env,
+                        start_new_session=True,
+                    )
+                    proc.wait()
+            except Exception as e:
+                self.app.call_from_thread(log_widget.write, f"[red]Restart error: {e}[/red]")
+
+            def _after() -> None:
+                for bid in ("btn-stop", "btn-restart"):
+                    try:
+                        self.query_one(f"#{bid}", Button).disabled = False
+                    except Exception:
+                        pass
+                self._check_running()
+                if self._running_entry:
+                    self._show_running()
+                else:
+                    self._show_stopped("Restart failed")
+
+            self.app.call_from_thread(_after)
+
+        threading.Thread(target=_do_restart, daemon=True).start()
+
+    def _sudo_kill(self) -> None:
+        pid = self._failed_stop_pid
+        if pid is None:
+            return
+        log_widget = self.query_one("#runner-log", RichLog)
+        self.query_one("#btn-sudo-kill", Button).disabled = True
+
+        def _do_kill() -> None:
+            try:
+                result = subprocess.run(
+                    ["sudo", "-n", "kill", "-9", str(pid)],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0:
+                    self.app.call_from_thread(
+                        log_widget.write,
+                        f"[{theme.YELLOW}]Killed PID {pid} with sudo[/{theme.YELLOW}]",
+                    )
+                    try:
+                        from dimos.core.run_registry import get_most_recent
+                        entry = get_most_recent()
+                        if entry and entry.pid == pid:
+                            entry.remove()
+                    except Exception:
+                        pass
+
+                    def _after() -> None:
+                        self._failed_stop_pid = None
+                        self._running_entry = None
+                        self._show_stopped("Killed with sudo")
+
+                    self.app.call_from_thread(_after)
+                else:
+                    from dimos.utils.prompt import sudo_prompt
+                    got_sudo = sudo_prompt("sudo is required to force-kill the process")
+                    if got_sudo:
+                        result2 = subprocess.run(
+                            ["sudo", "-n", "kill", "-9", str(pid)],
+                            capture_output=True,
+                            text=True,
+                        )
+                        if result2.returncode == 0:
+                            self.app.call_from_thread(
+                                log_widget.write,
+                                f"[{theme.YELLOW}]Killed PID {pid} with sudo[/{theme.YELLOW}]",
+                            )
+                            try:
+                                from dimos.core.run_registry import get_most_recent
+                                entry = get_most_recent()
+                                if entry and entry.pid == pid:
+                                    entry.remove()
+                            except Exception:
+                                pass
+
+                            def _after2() -> None:
+                                self._failed_stop_pid = None
+                                self._running_entry = None
+                                self._show_stopped("Killed with sudo")
+
+                            self.app.call_from_thread(_after2)
+                            return
+
+                    self.app.call_from_thread(
+                        log_widget.write,
+                        "[red]sudo kill failed — could not obtain sudo credentials[/red]",
+                    )
+
+                    def _reenable() -> None:
+                        self.query_one("#btn-sudo-kill", Button).disabled = False
+
+                    self.app.call_from_thread(_reenable)
+            except Exception as e:
+                self.app.call_from_thread(log_widget.write, f"[red]sudo kill error: {e}[/red]")
+
+                def _reenable2() -> None:
+                    self.query_one("#btn-sudo-kill", Button).disabled = False
+
+                self.app.call_from_thread(_reenable2)
+
+        threading.Thread(target=_do_kill, daemon=True).start()
 
     def _open_log_in_editor(self) -> None:
         try:
             from dimos.core.log_viewer import resolve_log_path
 
-            # Try the running entry first, then fall back to most recent
             entry = self._running_entry
             if entry:
                 path = resolve_log_path(entry.run_id)
             else:
-                path = resolve_log_path()  # resolves most recent
+                path = resolve_log_path()  # most recent
 
             if not path:
                 log_widget = self.query_one("#runner-log", RichLog)
@@ -593,9 +661,3 @@ class RunnerSubApp(SubApp):
 
     def on_unmount_subapp(self) -> None:
         self._stop_log = True
-        # Kill the launch subprocess if still running (not the daemon — just the launcher)
-        if self._child_proc is not None:
-            try:
-                self._child_proc.send_signal(signal.SIGTERM)
-            except Exception:
-                pass

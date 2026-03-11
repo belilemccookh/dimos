@@ -91,6 +91,7 @@ class DUIApp(App[None]):
     # ------------------------------------------------------------------
 
     def compose(self) -> ComposeResult:
+        yield Static("", id="hint-bar")
         with Container(id="sidebar"):
             for i, cls in enumerate(self._sub_app_classes):
                 yield Static(cls.TITLE, classes="tab-item", id=f"tab-{i}")

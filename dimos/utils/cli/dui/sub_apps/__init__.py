@@ -14,11 +14,13 @@ def get_sub_apps() -> list[type[SubApp]]:
     from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
     from dimos.utils.cli.dui.sub_apps.dtop import DtopSubApp
     from dimos.utils.cli.dui.sub_apps.humancli import HumanCLISubApp
+    from dimos.utils.cli.dui.sub_apps.launcher import LauncherSubApp
     from dimos.utils.cli.dui.sub_apps.lcmspy import LCMSpySubApp
-    from dimos.utils.cli.dui.sub_apps.runner import RunnerSubApp
+    from dimos.utils.cli.dui.sub_apps.runner import StatusSubApp
 
     return [
-        RunnerSubApp,
+        LauncherSubApp,
+        StatusSubApp,
         ConfigSubApp,
         DtopSubApp,
         LCMSpySubApp,
