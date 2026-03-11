@@ -1,28 +1,44 @@
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Dtop sub-app — embedded resource monitor."""
 
 from __future__ import annotations
 
+from collections import deque
 import threading
 import time
-from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
-from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
 from dimos.utils.cli import theme
 from dimos.utils.cli.dtop import (
-    ResourceSpyApp,
     _LABEL_COLOR,
     _SPARK_WIDTH,
+    ResourceSpyApp,
     _compute_ranges,
 )
 from dimos.utils.cli.dui.sub_app import SubApp
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class DtopSubApp(SubApp):
@@ -81,6 +97,12 @@ class DtopSubApp(SubApp):
 
     def on_mount_subapp(self) -> None:
         self.run_worker(self._init_lcm, exclusive=True, thread=True)
+        self._start_refresh_timer()
+
+    def on_resume_subapp(self) -> None:
+        self._start_refresh_timer()
+
+    def _start_refresh_timer(self) -> None:
         self.set_interval(0.5, self._refresh)
 
     def _init_lcm(self) -> None:
@@ -155,9 +177,7 @@ class DtopSubApp(SubApp):
                     title.append(f" [{pid}]", style=dim if stale else "#777777")
                 title.append(" ")
                 parts.append(Rule(title=title, style=border_style))
-            parts.extend(
-                ResourceSpyApp._make_lines(d, stale, ranges, self._cpu_history[role])
-            )
+            parts.extend(ResourceSpyApp._make_lines(d, stale, ranges, self._cpu_history[role]))
 
         first_role, first_rs, _, first_mods, first_pid = entries[0]
         panel_title = Text(" ")

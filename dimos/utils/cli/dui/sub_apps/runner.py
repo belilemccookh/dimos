@@ -17,11 +17,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from rich.panel import Panel
@@ -150,12 +150,20 @@ class StatusSubApp(SubApp):
         self._failed_stop_pid: int | None = None
         self._following_launch_log = False
         self._launch_log_mtime: float = 0.0
+        self._poll_count = 0
+
+    def _debug(self, msg: str) -> None:
+        """Log to the DUI debug panel if available."""
+        try:
+            self.app._log(f"[#8899aa]STATUS:[/#8899aa] {msg}")  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
     def compose(self) -> ComposeResult:
         yield Static("Blueprint Status", classes="subapp-header")
         with VerticalScroll(id="idle-container"):
             yield Static(self._idle_panel(), id="idle-panel")
-        yield RichLog(id="runner-log", markup=True, wrap=True)
+        yield RichLog(id="runner-log", markup=True, wrap=True, auto_scroll=True)
         with Horizontal(id="run-controls"):
             yield Button("Stop", id="btn-stop", variant="error")
             yield Button("Force Kill (sudo)", id="btn-sudo-kill")
@@ -172,15 +180,33 @@ class StatusSubApp(SubApp):
         return Panel(msg, border_style=theme.DIM, expand=False)
 
     def on_mount_subapp(self) -> None:
+        self._debug("on_mount_subapp called")
+        self._check_running()
+        entry = self._running_entry
+        self._debug(f"initial check: entry={getattr(entry, 'run_id', None)}")
+        if entry is not None:
+            self._debug("-> _show_running")
+            self._show_running()
+        else:
+            self._check_launch_log()
+            if not self._following_launch_log:
+                self._debug("-> _show_idle")
+                self._show_idle()
+            else:
+                self._debug("-> following launch log")
+        self._start_poll_timer()
+
+    def on_resume_subapp(self) -> None:
+        self._debug("on_resume_subapp: restarting timer after remount")
+        self._start_poll_timer()
+        # Re-sync UI state with current data
         self._check_running()
         if self._running_entry is not None:
             self._show_running()
-        else:
-            # Check if there's a fresh launch log to tail
-            self._check_launch_log()
-            if not self._following_launch_log:
-                self._show_idle()
+
+    def _start_poll_timer(self) -> None:
         self.set_interval(1.0, self._poll_running)
+        self._debug("timer started")
 
     def get_focus_target(self) -> object | None:
         if self._running_entry is not None:
@@ -199,10 +225,12 @@ class StatusSubApp(SubApp):
             from dimos.core.run_registry import get_most_recent
 
             self._running_entry = get_most_recent(alive_only=True)
-        except Exception:
+        except Exception as e:
+            self._debug(f"_check_running exception: {e}")
             self._running_entry = None
 
     def _poll_running(self) -> None:
+        self._poll_count += 1
         old_entry = self._running_entry
         self._check_running()
         new_entry = self._running_entry
@@ -210,15 +238,23 @@ class StatusSubApp(SubApp):
         old_id = getattr(old_entry, "run_id", None)
         new_id = getattr(new_entry, "run_id", None)
 
-        if old_id != new_id:
+        # Log every 10th poll or on state change
+        changed = old_id != new_id
+        if changed or self._poll_count % 10 == 1:
+            self._debug(
+                f"poll #{self._poll_count}: old={old_id} new={new_id} "
+                f"changed={changed} following_launch={self._following_launch_log}"
+            )
+
+        if changed:
             if new_entry is not None:
-                # A daemon appeared — switch from launch log to JSONL follow
+                self._debug(f"-> _show_running (new entry: {new_id})")
                 self._stop_log = True
                 self._following_launch_log = False
                 self._show_running()
                 return
             elif old_entry is not None:
-                # Process ended
+                self._debug(f"-> _show_stopped (entry gone: {old_id})")
                 self._stop_log = True
                 self._following_launch_log = False
                 self._show_stopped("Process ended")
@@ -235,17 +271,19 @@ class StatusSubApp(SubApp):
             mtime = log_path.stat().st_mtime
         except FileNotFoundError:
             return
-        # Only pick up if it was modified recently (within 30s) and is newer than last seen
+        age = time.time() - mtime
         if mtime <= self._launch_log_mtime:
             return
-        if time.time() - mtime > 30:
+        if age > 30:
             return
+        self._debug(f"_check_launch_log: new launch.log detected (age={age:.1f}s)")
         self._launch_log_mtime = mtime
         self._following_launch_log = True
         self._show_launching(log_path)
 
     def _show_launching(self, log_path: Path) -> None:
         """Show the launch log output while the daemon is starting."""
+        self._debug(f"_show_launching: {log_path}")
         self.query_one("#idle-container").styles.display = "none"
         self.query_one("#runner-log").styles.display = "block"
         self.query_one("#run-controls").styles.display = "none"
@@ -269,26 +307,34 @@ class StatusSubApp(SubApp):
                             # Check if the launch process finished (file stopped growing)
                             # and a daemon entry appeared — poll handles the transition
             except Exception as e:
-                self.app.call_from_thread(log_widget.write, f"[red]Error reading launch log: {e}[/red]")
+                self.app.call_from_thread(
+                    log_widget.write, f"[red]Error reading launch log: {e}[/red]"
+                )
 
         self._log_thread = threading.Thread(target=_tail, daemon=True)
         self._log_thread.start()
 
     def _show_running(self) -> None:
         """Show controls for a running blueprint."""
-        self.query_one("#idle-container").styles.display = "none"
-        self.query_one("#runner-log").styles.display = "block"
-        self.query_one("#run-controls").styles.display = "block"
-        self.query_one("#btn-stop").styles.display = "block"
-        self.query_one("#btn-sudo-kill").styles.display = "none"
-        self.query_one("#btn-restart").styles.display = "block"
-        self.query_one("#btn-open-log").styles.display = "block"
-        self._failed_stop_pid = None
-        entry = self._running_entry
-        if entry:
-            status = self.query_one("#runner-status", Static)
-            status.update(f"Running: {entry.blueprint} (PID {entry.pid})")
-            self._start_log_follow(entry)
+        self._debug("_show_running: setting widget display states")
+        try:
+            self.query_one("#idle-container").styles.display = "none"
+            self.query_one("#runner-log").styles.display = "block"
+            self.query_one("#run-controls").styles.display = "block"
+            self.query_one("#btn-stop").styles.display = "block"
+            self.query_one("#btn-sudo-kill").styles.display = "none"
+            self.query_one("#btn-restart").styles.display = "block"
+            self.query_one("#btn-open-log").styles.display = "block"
+            self._failed_stop_pid = None
+            entry = self._running_entry
+            if entry:
+                status = self.query_one("#runner-status", Static)
+                status.update(self._format_status_line(entry))
+                self._debug(f"_show_running: starting log follow for {entry.run_id}")
+                self._start_log_follow(entry)
+            self._debug("_show_running: done")
+        except Exception as e:
+            self._debug(f"_show_running CRASHED: {e}")
 
     def _show_stopped(self, message: str = "Stopped") -> None:
         """Show controls for a stopped state with logs still visible."""
@@ -308,6 +354,7 @@ class StatusSubApp(SubApp):
 
     def _show_idle(self) -> None:
         """Show big idle message — no blueprint running."""
+        self._debug("_show_idle called")
         self.query_one("#idle-container").styles.display = "block"
         self.query_one("#runner-log").styles.display = "none"
         self.query_one("#run-controls").styles.display = "none"
@@ -333,19 +380,103 @@ class StatusSubApp(SubApp):
             status.update("No blueprint running")
 
     # ------------------------------------------------------------------
+    # Entry info formatting
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_status_line(entry: Any) -> str:
+        """One-line status bar summary including config overrides."""
+        overrides = getattr(entry, "config_overrides", None) or {}
+        parts = [f"Running: {entry.blueprint} (PID {entry.pid})"]
+        if overrides:
+            flags = " ".join(
+                f"--{k.replace('_', '-')}"
+                if isinstance(v, bool) and v
+                else f"--no-{k.replace('_', '-')}"
+                if isinstance(v, bool)
+                else f"--{k.replace('_', '-')}={v}"
+                for k, v in overrides.items()
+            )
+            parts.append(flags)
+        return " | ".join(parts)
+
+    @staticmethod
+    def _format_launch_header(entry: Any) -> list[str]:
+        """Rich-markup lines summarising how the blueprint was launched."""
+        lines: list[str] = []
+        argv = getattr(entry, "original_argv", None) or []
+        overrides = getattr(entry, "config_overrides", None) or {}
+        if argv:
+            lines.append(f"[dim]$ {' '.join(argv)}[/dim]")
+        if overrides:
+            items = "  ".join(f"[{theme.CYAN}]{k}[/{theme.CYAN}]={v}" for k, v in overrides.items())
+            lines.append(f"[dim]config overrides:[/dim] {items}")
+        lines.append("")  # blank separator
+        return lines
+
+    # ------------------------------------------------------------------
     # Log streaming
     # ------------------------------------------------------------------
+
+    # Rich styles matching the structlog compact console color scheme
+    _LEVEL_STYLES: dict[str, str] = {
+        "dbg": "bold cyan",
+        "deb": "bold cyan",
+        "inf": "bold green",
+        "war": "bold yellow",
+        "err": "bold red",
+        "cri": "bold red",
+    }
+
+    @staticmethod
+    def _format_jsonl_line(raw: str) -> Text:
+        """Parse a JSONL log line and return a colorized Rich Text object."""
+        import json
+        from pathlib import Path as P
+
+        _STANDARD_KEYS = {"timestamp", "level", "logger", "event", "func_name", "lineno"}
+
+        try:
+            rec: dict[str, object] = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return Text(raw.rstrip())
+
+        ts = str(rec.get("timestamp", ""))
+        hms = ts[11:19] if len(ts) >= 19 else ts
+        level = str(rec.get("level", "?"))[:3].lower()
+        logger = P(str(rec.get("logger", "?"))).name
+        event = str(rec.get("event", ""))
+
+        line = Text()
+        line.append(hms, style="dim")
+        lvl_style = StatusSubApp._LEVEL_STYLES.get(level, "")
+        line.append(f"[{level}]", style=lvl_style)
+        line.append(f"[{logger:17}] ", style="dim")
+        line.append(event, style="blue")
+
+        extras = {k: v for k, v in rec.items() if k not in _STANDARD_KEYS}
+        if extras:
+            line.append(" ")
+            for k, v in sorted(extras.items()):
+                line.append(f"{k}", style="cyan")
+                line.append("=", style="white")
+                line.append(f"{v}", style="magenta")
+                line.append(" ")
+
+        return line
 
     def _start_log_follow(self, entry: Any) -> None:
         self._stop_log = False
         log_widget = self.query_one("#runner-log", RichLog)
         log_widget.clear()
+        # Print launch info header
+        for line in self._format_launch_header(entry):
+            log_widget.write(line)
 
         def _follow() -> None:
             try:
                 from dimos.core.log_viewer import (
                     follow_log,
-                    format_line,
                     read_log,
                     resolve_log_path,
                 )
@@ -358,12 +489,12 @@ class StatusSubApp(SubApp):
                 for line in read_log(path, 50):
                     if self._stop_log:
                         return
-                    formatted = format_line(line)
-                    self.app.call_from_thread(log_widget.write, formatted)
+                    rendered = self._format_jsonl_line(line)
+                    self.app.call_from_thread(log_widget.write, rendered)
 
                 for line in follow_log(path, stop=lambda: self._stop_log):
-                    formatted = format_line(line)
-                    self.app.call_from_thread(log_widget.write, formatted)
+                    rendered = self._format_jsonl_line(line)
+                    self.app.call_from_thread(log_widget.write, rendered)
             except Exception as e:
                 self.app.call_from_thread(log_widget.write, f"[red]Error: {e}[/red]")
 
@@ -455,7 +586,10 @@ class StatusSubApp(SubApp):
                         f"[red]Permission denied — cannot stop PID {entry.pid}[/red]",
                     )
                 except Exception as e:
-                    if "permission" in str(e).lower() or "operation not permitted" in str(e).lower():
+                    if (
+                        "permission" in str(e).lower()
+                        or "operation not permitted" in str(e).lower()
+                    ):
                         permission_error = True
                     self.app.call_from_thread(log_widget.write, f"[red]Stop error: {e}[/red]")
 
@@ -470,7 +604,9 @@ class StatusSubApp(SubApp):
                     self.query_one("#btn-sudo-kill").styles.display = "block"
                     self.query_one("#btn-sudo-kill", Button).focus()
                     s = self.query_one("#runner-status", Static)
-                    s.update(f"Stop failed (permission denied) — try Force Kill for PID {entry.pid}")
+                    s.update(
+                        f"Stop failed (permission denied) — try Force Kill for PID {entry.pid}"
+                    )
                 else:
                     self._show_stopped("Stopped")
 
@@ -500,6 +636,7 @@ class StatusSubApp(SubApp):
             if old_entry:
                 try:
                     from dimos.core.run_registry import stop_entry
+
                     stop_entry(old_entry)
                 except Exception:
                     pass
@@ -507,6 +644,7 @@ class StatusSubApp(SubApp):
             config_args: list[str] = []
             try:
                 from dimos.utils.cli.dui.sub_apps.config import ConfigSubApp
+
                 for inst in self.app._instances:  # type: ignore[attr-defined]
                     if isinstance(inst, ConfigSubApp):
                         for k, v in inst.get_overrides().items():
@@ -519,7 +657,15 @@ class StatusSubApp(SubApp):
             except Exception:
                 pass
 
-            cmd = [sys.executable, "-m", "dimos.robot.cli.dimos", *config_args, "run", "--daemon", name]
+            cmd = [
+                sys.executable,
+                "-m",
+                "dimos.robot.cli.dimos",
+                *config_args,
+                "run",
+                "--daemon",
+                name,
+            ]
             env = os.environ.copy()
             env["FORCE_COLOR"] = "1"
             env["PYTHONUNBUFFERED"] = "1"
@@ -576,6 +722,7 @@ class StatusSubApp(SubApp):
                     )
                     try:
                         from dimos.core.run_registry import get_most_recent
+
                         entry = get_most_recent()
                         if entry and entry.pid == pid:
                             entry.remove()
@@ -590,6 +737,7 @@ class StatusSubApp(SubApp):
                     self.app.call_from_thread(_after)
                 else:
                     from dimos.utils.prompt import sudo_prompt
+
                     got_sudo = sudo_prompt("sudo is required to force-kill the process")
                     if got_sudo:
                         result2 = subprocess.run(
@@ -604,6 +752,7 @@ class StatusSubApp(SubApp):
                             )
                             try:
                                 from dimos.core.run_registry import get_most_recent
+
                                 entry = get_most_recent()
                                 if entry and entry.pid == pid:
                                     entry.remove()

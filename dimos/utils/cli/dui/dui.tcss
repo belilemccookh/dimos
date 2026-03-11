@@ -73,7 +73,7 @@ Screen {
 }
 
 #hint-bar {
-    dock: bottom;
+    dock: top;
     height: 1;
     width: 100%;
     background: #1a2020;

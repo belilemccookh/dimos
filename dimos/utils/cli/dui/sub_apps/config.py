@@ -1,14 +1,27 @@
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Config sub-app — interactive GlobalConfig editor."""
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-from typing import Any
+import sys
+from typing import TYPE_CHECKING, Any
 
 from rich.text import Text
-from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.message import Message
 from textual.reactive import reactive
@@ -17,6 +30,9 @@ from textual.widgets import Input, Label, Static, Switch
 
 from dimos.utils.cli import theme
 from dimos.utils.cli.dui.sub_app import SubApp
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 _VIEWER_OPTIONS = ["rerun", "rerun-web", "rerun-connect", "foxglove", "none"]
 
@@ -89,6 +105,7 @@ class ConfigInput(_FormNavigationMixin, Input):
 
     def action_nav(self, delta: int) -> None:
         self._navigate_field(delta)
+
 
 _DEFAULTS: dict[str, object] = {
     "viewer": "rerun",
@@ -206,7 +223,9 @@ class ConfigSubApp(SubApp):
         yield ConfigInput(value=str(v.get("n_workers", 2)), id="cfg-n-workers", type="integer")
 
         yield Label("robot_ip", classes="field-label")
-        yield ConfigInput(value=str(v.get("robot_ip", "")), placeholder="e.g. 192.168.12.1", id="cfg-robot-ip")
+        yield ConfigInput(
+            value=str(v.get("robot_ip", "")), placeholder="e.g. 192.168.12.1", id="cfg-robot-ip"
+        )
 
         dtop_val = bool(v.get("dtop", False))
         with Horizontal(classes="switch-row"):

@@ -17,13 +17,13 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import subprocess
 import sys
 import threading
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from dimos.utils.cli import theme
 from dimos.utils.cli.dui.sub_app import SubApp
@@ -117,6 +117,13 @@ class LauncherSubApp(SubApp):
     def on_mount_subapp(self) -> None:
         self._populate_blueprints()
         self._sync_status()
+        self._start_poll_timer()
+
+    def on_resume_subapp(self) -> None:
+        self._start_poll_timer()
+        self._sync_status()
+
+    def _start_poll_timer(self) -> None:
         self.set_interval(2.0, self._sync_status)
 
     def get_focus_target(self) -> object | None:
@@ -278,7 +285,7 @@ class LauncherSubApp(SubApp):
                     self._sync_status()
 
                 self.app.call_from_thread(_after)
-            except Exception as e:
+            except Exception:
 
                 def _err() -> None:
                     self._launching = False

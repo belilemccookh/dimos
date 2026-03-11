@@ -1,3 +1,17 @@
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """DUI — DimOS Unified TUI."""
 
 from __future__ import annotations
@@ -6,18 +20,22 @@ import os
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
-from textual.events import Click, Key, Resize
-from textual.widget import Widget
 from textual.widgets import RichLog, Static
 
-from dimos.utils.cli.dui.sub_app import SubApp
 from dimos.utils.cli.dui.sub_apps import get_sub_apps
 
-_DUAL_WIDTH = 240   # >= this width: 2 panels
+if TYPE_CHECKING:
+    from textual.events import Click, Key, Resize
+    from textual.widget import Widget
+
+    from dimos.utils.cli.dui.sub_app import SubApp
+
+_DUAL_WIDTH = 240  # >= this width: 2 panels
 _TRIPLE_WIDTH = 320  # >= this width: 3 panels
 _MAX_PANELS = 3
 _QUIT_WINDOW = 1.5  # seconds to press again to confirm quit
@@ -36,7 +54,8 @@ class DUIApp(App[None]):
         Binding("ctrl+left", "focus_prev_panel", "Panel prev", priority=True),
         Binding("ctrl+right", "focus_next_panel", "Panel next", priority=True),
         Binding("escape", "quit_or_esc", "Quit", priority=True),
-        Binding("ctrl+c", "quit_or_esc", "Quit", priority=True),
+        Binding("ctrl+c", "copy_text", "Copy", priority=True),
+        Binding("ctrl+q", "quit_or_esc", "Quit", priority=True),
     ]
 
     def __init__(self, *, debug: bool = False) -> None:
@@ -59,6 +78,7 @@ class DUIApp(App[None]):
         self._debug_log_file: object | None = None
         if debug:
             from pathlib import Path
+
             log_path = Path.home() / ".dimos" / "dio-debug.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             f = open(log_path, "w")
@@ -73,6 +93,7 @@ class DUIApp(App[None]):
         if not self._debug:
             return
         import re
+
         plain = re.sub(r"\[/?[^\]]*\]", "", msg)
         if self._debug_log_file is not None:
             try:
@@ -165,9 +186,7 @@ class DUIApp(App[None]):
             old = self._focused_panel
             self._focused_panel = panel
             self._sync_tabs()
-            self._log(
-                f"[dim]FOCUS-TRACK: panel {old}->{panel}[/dim]"
-            )
+            self._log(f"[dim]FOCUS-TRACK: panel {old}->{panel}[/dim]")
 
     # ------------------------------------------------------------------
     # Click-to-focus panel
@@ -235,7 +254,9 @@ class DUIApp(App[None]):
                         await inst.remove()
                     await dest.mount(inst)
                     self._instance_pane[i] = target_panel
-                    self._log(f"[dim]  moved {self._sub_app_classes[i].TITLE} -> panel{target_panel}[/dim]")
+                    self._log(
+                        f"[dim]  moved {self._sub_app_classes[i].TITLE} -> panel{target_panel}[/dim]"
+                    )
                 inst.styles.display = "block"
             else:
                 inst.styles.display = "none"
@@ -268,7 +289,8 @@ class DUIApp(App[None]):
         parts = ["Alt+Up/Down: switch tab"]
         if self._num_panels > 1:
             parts.append("Alt+Left/Right: switch panel")
-        parts.append("Esc: quit")
+        parts.append("Ctrl+C: copy")
+        parts.append("Ctrl+Q/Esc: quit")
         bar.update(" | ".join(parts))
 
     # ------------------------------------------------------------------
@@ -277,13 +299,17 @@ class DUIApp(App[None]):
 
     async def action_tab_prev(self) -> None:
         self._sync_focused_panel()
-        self._log(f"[#ffcc00]ACTION[/#ffcc00] tab_prev  panel={self._focused_panel} idx={self._panel_idx[:self._num_panels]}")
+        self._log(
+            f"[#ffcc00]ACTION[/#ffcc00] tab_prev  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
+        )
         self._clear_quit_pending()
         await self._move_tab(-1)
 
     async def action_tab_next(self) -> None:
         self._sync_focused_panel()
-        self._log(f"[#ffcc00]ACTION[/#ffcc00] tab_next  panel={self._focused_panel} idx={self._panel_idx[:self._num_panels]}")
+        self._log(
+            f"[#ffcc00]ACTION[/#ffcc00] tab_next  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
+        )
         self._clear_quit_pending()
         await self._move_tab(1)
 
@@ -301,8 +327,19 @@ class DUIApp(App[None]):
         new = min(self._num_panels - 1, self._focused_panel + 1)
         self._focus_panel(new)
 
+    def action_copy_text(self) -> None:
+        """Copy selected text to clipboard, or quit if no selection."""
+        selected = self.screen.get_selected_text()
+        if selected:
+            self.copy_to_clipboard(selected)
+            self.screen.clear_selection()
+            self._log("[#ffcc00]ACTION[/#ffcc00] copy_text (copied to clipboard)")
+        else:
+            self._log("[#ffcc00]ACTION[/#ffcc00] copy_text -> no selection, treating as quit")
+            self._handle_quit_press()
+
     def action_quit_or_esc(self) -> None:
-        self._log(f"[#ffcc00]ACTION[/#ffcc00] quit_or_esc")
+        self._log("[#ffcc00]ACTION[/#ffcc00] quit_or_esc")
         self._handle_quit_press()
 
     # ------------------------------------------------------------------
@@ -354,7 +391,7 @@ class DUIApp(App[None]):
         self._panel_idx[panel] = idx
         self._log(
             f"  -> MOVE panel={panel} {self._sub_app_classes[old_idx].TITLE}->{self._sub_app_classes[idx].TITLE} "
-            f"idx={self._panel_idx[:self._num_panels]}"
+            f"idx={self._panel_idx[: self._num_panels]}"
         )
         await self._place_instances()
         self._sync_tabs()
@@ -362,7 +399,9 @@ class DUIApp(App[None]):
         actual = self.focused
         actual_name = type(actual).__name__ if actual else "None"
         actual_id = getattr(actual, "id", None) or ""
-        self._log(f"  -> after focus: {actual_name}#{actual_id} in panel={self._panel_for_widget(actual)}")
+        self._log(
+            f"  -> after focus: {actual_name}#{actual_id} in panel={self._panel_for_widget(actual)}"
+        )
 
     def _handle_quit_press(self) -> None:
         now = time.monotonic()
@@ -371,7 +410,7 @@ class DUIApp(App[None]):
             return
         self._quit_pressed_at = now
         bar = self.query_one("#hint-bar", Static)
-        bar.update("Press Esc or Ctrl+C again to exit")
+        bar.update("Press Esc or Ctrl+Q again to exit")
         if self._quit_timer is not None:
             self._quit_timer.stop()  # type: ignore[union-attr]
         self._quit_timer = self.set_timer(_QUIT_WINDOW, self._clear_quit_pending)
@@ -409,6 +448,7 @@ class DUIApp(App[None]):
                     def _on_result(value: bool) -> None:
                         result.append(value)
                         event.set()
+
                     self.push_screen(ConfirmScreen(message, default), callback=_on_result)
 
                 self.call_from_thread(_push)
@@ -439,6 +479,7 @@ class DUIApp(App[None]):
                     def _on_result(value: bool) -> None:
                         result.append(value)
                         event.set()
+
                     self.push_screen(SudoScreen(message), callback=_on_result)
 
                 self.call_from_thread(_push)
@@ -463,7 +504,7 @@ def main() -> None:
     set_dio_sudo_hook(app._handle_sudo)
 
     _real_stdin = sys.stdin
-    sys.stdin = open(os.devnull)  # noqa: SIM115
+    sys.stdin = open(os.devnull)
     try:
         app.run()
     except KeyboardInterrupt:
