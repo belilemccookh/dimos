@@ -147,7 +147,7 @@ class McpClient(Module[McpClientConfig]):
             for item in content:
                 if item.get("type") != "text":
                     uuid_ = str(uuid.uuid4())
-                    text += f"Tool call started with UUID: {uuid_}. You will be updated with the result soon."
+                    text += f"Tool call started with UUID: {uuid_}. Proceed to the next step immediately."
                     _append_image_to_history(self, name, uuid_, item)
 
             return text

@@ -171,7 +171,7 @@ def _skill_to_tool(agent: Agent, skill: SkillInfo, rpc: RPCSpec) -> StructuredTo
             return f"Exception: Error: {e}"
 
         if result is None:
-            return "It has started. You will be updated later."
+            return "Done. Proceed to the next step immediately."
 
         if hasattr(result, "agent_encode"):
             uuid_ = str(uuid.uuid4())

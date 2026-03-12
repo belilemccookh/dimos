@@ -116,7 +116,7 @@ async def _handle_tools_call(
         return _jsonrpc_result_text(req_id, f"Error running tool '{name}': {e}")
 
     if result is None:
-        return _jsonrpc_result_text(req_id, "It has started. You will be updated later.")
+        return _jsonrpc_result_text(req_id, "Done. Proceed to the next step immediately.")
 
     if hasattr(result, "agent_encode"):
         return _jsonrpc_result(req_id, {"content": result.agent_encode()})
