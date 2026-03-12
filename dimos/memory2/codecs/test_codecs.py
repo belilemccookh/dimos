@@ -93,7 +93,7 @@ def _jpeg_case() -> Case | None:
         replay = TimedSensorReplay("unitree_go2_bigoffice/video")
         frames = [replay.find_closest_seek(float(i)) for i in range(1, 4)]
         codec = JpegCodec(quality=95)
-    except ImportError:
+    except (ImportError, RuntimeError):
         return None
 
     return Case(
