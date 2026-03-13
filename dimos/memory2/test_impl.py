@@ -435,7 +435,7 @@ class TestStandaloneComponents:
 
     def test_observation_store_standalone(self, tmp_path) -> None:
         from dimos.memory2.codecs.base import codec_for
-        from dimos.memory2.impl.sqlite import SqliteObservationStore
+        from dimos.memory2.observationstore.sqlite import SqliteObservationStore
         from dimos.memory2.type.observation import Observation
 
         db = str(tmp_path / "obs.db")
@@ -492,7 +492,7 @@ class TestStandaloneComponents:
         import sqlite3
 
         from dimos.memory2.blobstore.sqlite import SqliteBlobStore
-        from dimos.memory2.impl.sqlite import SqliteObservationStore
+        from dimos.memory2.observationstore.sqlite import SqliteObservationStore
         from dimos.memory2.vectorstore.sqlite import SqliteVectorStore
 
         conn = sqlite3.connect(":memory:")

@@ -14,64 +14,12 @@
 
 from __future__ import annotations
 
-import threading
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import Any
 
 from dimos.memory2.backend import Backend
 from dimos.memory2.codecs.base import Codec, codec_for
+from dimos.memory2.observationstore.memory import ListObservationStore
 from dimos.memory2.store import Store
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from dimos.memory2.type.filter import StreamQuery
-    from dimos.memory2.type.observation import Observation
-
-T = TypeVar("T")
-
-
-class ListObservationStore(Generic[T]):
-    """In-memory metadata store for experimentation. Thread-safe."""
-
-    def __init__(self, name: str = "<memory>") -> None:
-        self._name = name
-        self._observations: list[Observation[T]] = []
-        self._next_id = 0
-        self._lock = threading.Lock()
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    def insert(self, obs: Observation[T]) -> int:
-        with self._lock:
-            obs.id = self._next_id
-            row_id = self._next_id
-            self._next_id += 1
-            self._observations.append(obs)
-        return row_id
-
-    def query(self, q: StreamQuery) -> Iterator[Observation[T]]:
-        with self._lock:
-            snapshot = list(self._observations)
-
-        # Text search — substring match
-        if q.search_text is not None:
-            needle = q.search_text.lower()
-            it: Iterator[Observation[T]] = (
-                obs for obs in snapshot if needle in str(obs.data).lower()
-            )
-            return q.apply(it)
-
-        return q.apply(iter(snapshot))
-
-    def count(self, q: StreamQuery) -> int:
-        return sum(1 for _ in self.query(q))
-
-    def fetch_by_ids(self, ids: list[int]) -> list[Observation[T]]:
-        id_set = set(ids)
-        with self._lock:
-            return [obs for obs in self._observations if obs.id in id_set]
 
 
 class MemoryStore(Store):

@@ -20,7 +20,7 @@ import pytest
 
 from dimos.memory2.backend import Backend
 from dimos.memory2.codecs.pickle import PickleCodec
-from dimos.memory2.impl.memory import ListObservationStore
+from dimos.memory2.observationstore.memory import ListObservationStore
 from dimos.memory2.stream import Stream
 from dimos.memory2.transform import FnTransformer
 from dimos.memory2.type.backend import Notifier

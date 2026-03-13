@@ -8,9 +8,11 @@ from dimos.memory2.buffer import (
     Unbounded,
 )
 from dimos.memory2.embed import EmbedImages, EmbedText
-from dimos.memory2.impl.memory import ListObservationStore, MemoryStore
-from dimos.memory2.impl.sqlite import SqliteObservationStore, SqliteStore, SqliteStoreConfig
+from dimos.memory2.impl.memory import MemoryStore
+from dimos.memory2.impl.sqlite import SqliteStore, SqliteStoreConfig
 from dimos.memory2.livechannel import SubjectNotifier
+from dimos.memory2.observationstore.memory import ListObservationStore
+from dimos.memory2.observationstore.sqlite import SqliteObservationStore
 from dimos.memory2.store import Store, StoreConfig
 from dimos.memory2.stream import Stream
 from dimos.memory2.transform import FnTransformer, QualityWindow, Transformer
