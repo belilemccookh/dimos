@@ -131,7 +131,7 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
 
         deployed_module: ModuleProxyProtocol
         if is_docker_module(module_class):
-            deployed_module = DockerModule(module_class, global_config=global_config, **kwargs)
+            deployed_module = DockerModule(module_class, global_config=global_config, **kwargs)  # type: ignore[arg-type]
         else:
             deployed_module = self._client.deploy(module_class, global_config, kwargs)
         self._deployed_modules[module_class] = deployed_module  # type: ignore[assignment]

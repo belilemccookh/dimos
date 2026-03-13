@@ -66,6 +66,7 @@ class WorkerManager:
         if self._closed:
             raise RuntimeError("WorkerManager is closed")
 
+        module_specs = list(module_specs)
         if len(module_specs) == 0:
             return []
 
