@@ -14,7 +14,6 @@
 
 """G1 high-level control via native Unitree SDK2 (DDS)."""
 
-from dataclasses import dataclass
 import difflib
 from enum import IntEnum
 import json
@@ -101,7 +100,6 @@ class FsmState(IntEnum):
 # ---------------------------------------------------------------------------
 # Module
 # ---------------------------------------------------------------------------
-@dataclass
 class G1HighLevelDdsSdkConfig(ModuleConfig):
     ip: str | None = None
     network_interface: str = "eth0"
@@ -125,9 +123,9 @@ class G1HighLevelDdsSdk(Module, HighLevelG1Spec):
     # Primary timing knob — individual delays in methods are fractions of this.
     _standup_step_delay: float = 3.0
 
-    def __init__(self, *args: Any, cfg: GlobalConfig = global_config, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._global_config = cfg
+    def __init__(self, *args: Any, g: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(*args, g=g, **kwargs)
+        self._global_config = g
         self._stop_timer: threading.Timer | None = None
         self._running = False
         self._mode_selected = False

@@ -14,7 +14,6 @@
 
 """G1 high-level control via WebRTC connection."""
 
-from dataclasses import dataclass
 import difflib
 from typing import Any
 
@@ -69,7 +68,6 @@ _ARM_COMMANDS_DOC = "\n".join(f'- "{name}": {desc}' for name, (_, desc) in _ARM_
 _MODE_COMMANDS_DOC = "\n".join(f'- "{name}": {desc}' for name, (_, desc) in _MODE_COMMANDS.items())
 
 
-@dataclass
 class G1HighLevelWebRtcConfig(ModuleConfig):
     ip: str | None = None
     connection_mode: str = "ai"
@@ -89,9 +87,9 @@ class G1HighLevelWebRtc(Module, HighLevelG1Spec):
 
     connection: UnitreeWebRTCConnection | None
 
-    def __init__(self, *args: Any, cfg: GlobalConfig = global_config, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._global_config = cfg
+    def __init__(self, *args: Any, g: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(*args, g=g, **kwargs)
+        self._global_config = g
 
     # ----- lifecycle -------------------------------------------------------
 

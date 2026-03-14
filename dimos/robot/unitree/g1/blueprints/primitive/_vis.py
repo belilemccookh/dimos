@@ -46,6 +46,10 @@ def _static_path_frame(rr: Any) -> list[Any]:
     return [rr.Transform3D(parent_frame="tf#/sensor")]
 
 
+def _static_map_frame(rr: Any) -> list[Any]:
+    return [rr.Transform3D(parent_frame="tf#/map")]
+
+
 def _static_base_link(rr: Any) -> list[Any]:
     return [
         rr.Boxes3D(
@@ -70,6 +74,11 @@ _vis = vis_module(
         "static": {
             "world/tf/base_link": _static_base_link,
             "world/path": _static_path_frame,
+            # Registered scan and global terrain map are in map-frame coordinates.
+            # Anchor them to tf#/map so they render at the correct height in the
+            # Rerun world frame (which is shifted from map by -vehicle_height).
+            "world/lidar": _static_map_frame,
+            "world/global_pointcloud": _static_map_frame,
         },
     },
 )
