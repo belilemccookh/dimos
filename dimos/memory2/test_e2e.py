@@ -28,13 +28,13 @@ from dimos.utils.data import get_data_dir
 from dimos.utils.testing.replay import TimedSensorReplay
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
 
 DB_PATH = get_data_dir() / "go2_bigoffice.db"
 
 
 @pytest.fixture(scope="module")
-def session() -> Generator[SqliteStore, None, None]:
+def session() -> Iterator[SqliteStore]:
     store = SqliteStore(path=str(DB_PATH))
     with store:
         yield store

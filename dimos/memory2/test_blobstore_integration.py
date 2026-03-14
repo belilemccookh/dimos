@@ -27,7 +27,7 @@ from dimos.memory2.type.observation import _UNLOADED
 from dimos.models.embedding.base import Embedding
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
     from pathlib import Path
 
 
@@ -38,7 +38,7 @@ def _emb(vec: list[float]) -> Embedding:
 
 
 @pytest.fixture
-def bs(tmp_path: Path) -> Generator[FileBlobStore, None, None]:
+def bs(tmp_path: Path) -> Iterator[FileBlobStore]:
     blob_store = FileBlobStore(root=str(tmp_path / "blobs"))
     blob_store.start()
     yield blob_store
@@ -46,7 +46,7 @@ def bs(tmp_path: Path) -> Generator[FileBlobStore, None, None]:
 
 
 @pytest.fixture
-def store(bs: FileBlobStore) -> Generator[MemoryStore, None, None]:
+def store(bs: FileBlobStore) -> Iterator[MemoryStore]:
     with MemoryStore(blob_store=bs) as s:
         yield s
 

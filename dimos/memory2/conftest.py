@@ -28,7 +28,7 @@ from dimos.memory2.store.memory import MemoryStore
 from dimos.memory2.store.sqlite import SqliteStore
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
     from pathlib import Path
 
     from dimos.memory2.blobstore.base import BlobStore
@@ -36,19 +36,19 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def memory_store() -> Generator[MemoryStore, None, None]:
+def memory_store() -> Iterator[MemoryStore]:
     with MemoryStore() as store:
         yield store
 
 
 @pytest.fixture
-def memory_session(memory_store: MemoryStore) -> Generator[MemoryStore, None, None]:
+def memory_session(memory_store: MemoryStore) -> Iterator[MemoryStore]:
     """Alias: in the new architecture, the store IS the session."""
     yield memory_store
 
 
 @pytest.fixture
-def sqlite_store() -> Generator[SqliteStore, None, None]:
+def sqlite_store() -> Iterator[SqliteStore]:
     with tempfile.NamedTemporaryFile(suffix=".db") as f:
         store = SqliteStore(path=f.name)
         with store:
@@ -56,7 +56,7 @@ def sqlite_store() -> Generator[SqliteStore, None, None]:
 
 
 @pytest.fixture
-def sqlite_session(sqlite_store: SqliteStore) -> Generator[SqliteStore, None, None]:
+def sqlite_session(sqlite_store: SqliteStore) -> Iterator[SqliteStore]:
     """Alias: in the new architecture, the store IS the session."""
     yield sqlite_store
 
@@ -72,13 +72,13 @@ def session(request: pytest.FixtureRequest) -> Store:
 
 
 @pytest.fixture
-def file_blob_store(tmp_path: Path) -> Generator[FileBlobStore, None, None]:
+def file_blob_store(tmp_path: Path) -> Iterator[FileBlobStore]:
     with FileBlobStore(root=str(tmp_path / "blobs")) as store:
         yield store
 
 
 @pytest.fixture
-def sqlite_blob_store() -> Generator[SqliteBlobStore, None, None]:
+def sqlite_blob_store() -> Iterator[SqliteBlobStore]:
     conn = sqlite3.connect(":memory:")
     with SqliteBlobStore(conn=conn) as store:
         yield store

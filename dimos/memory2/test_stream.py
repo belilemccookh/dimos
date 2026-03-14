@@ -30,13 +30,13 @@ from dimos.memory2.transform import FnTransformer, QualityWindow, Transformer
 from dimos.memory2.type.observation import Observation
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Callable
 
     from dimos.memory2.stream import Stream
 
 
 @pytest.fixture
-def make_stream(session) -> Generator[Callable[..., Stream[int]], None, None]:
+def make_stream(session) -> Callable[..., Stream[int]]:
     stream_index = 0
 
     def f(n: int = 5, start_ts: float = 0.0):
