@@ -74,6 +74,7 @@ from dimos.core.docker_runner import DockerModuleConfig
 from dimos.core.module import Module
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs import (
+    PointStamped,
     PoseStamped,
     Quaternion,
     Transform,
@@ -155,6 +156,13 @@ class ROSNavConfig(DockerModuleConfig):
     # The CMU nav stack uses this to position the simulated sensor origin;
     # it is forwarded to the ROS launch as the ``vehicleHeight`` parameter.
     vehicle_height: float = 0.75
+
+    # --- Teleop override ---
+    # Seconds of silence after the last teleop cmd_vel before switching back
+    # to the ROS nav stack.  At the end of the cooldown the module publishes
+    # a goal at the robot's current position so the nav stack re-engages at
+    # standstill instead of resuming the old goal.
+    teleop_cooldown_sec: float = 1.0
 
     # --- Runtime mode settings ---
     # mode controls which ROS launch file the entrypoint selects:
@@ -296,6 +304,9 @@ class ROSNav(Module):
     default_config = ROSNavConfig
 
     goal_request: In[PoseStamped]
+    clicked_point: In[PointStamped]
+    stop_explore_cmd: In[Bool]
+    teleop_cmd_vel: In[Twist]
 
     color_image: Out[Image]
     lidar: Out[PointCloud2]
@@ -318,6 +329,12 @@ class ROSNav(Module):
     _current_goal: PoseStamped | None = None
     _goal_reached: bool = False
 
+    # Teleop override state
+    _teleop_active: bool = False
+    _teleop_lock: threading.Lock
+    _teleop_timer: threading.Timer | None = None
+    _last_odom: PoseStamped | None = None
+
     def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(*args, **kwargs)
         import rclpy
@@ -325,6 +342,7 @@ class ROSNav(Module):
 
         # Initialize state tracking
         self._state_lock = threading.Lock()
+        self._teleop_lock = threading.Lock()
         self._navigation_state = NavigationState.IDLE
         self._goal_reached = False
 
@@ -389,6 +407,11 @@ class ROSNav(Module):
         self._spin_thread.start()
 
         self.goal_request.subscribe(self._on_goal_pose)
+        self.clicked_point.subscribe(
+            lambda pt: self._on_goal_pose(pt.to_pose_stamped())
+        )
+        self.stop_explore_cmd.subscribe(self._on_stop_cmd)
+        self.teleop_cmd_vel.subscribe(self._on_teleop_cmd_vel)
         logger.info("NavigationModule started with ROS2 spinning")
 
     def _spin_node(self) -> None:
@@ -419,6 +442,8 @@ class ROSNav(Module):
         self.goal_active.publish(dimos_pose)
 
     def _on_ros_cmd_vel(self, msg: ROSTwistStamped) -> None:
+        if self._teleop_active:
+            return  # Suppress nav stack cmd_vel during teleop override
         self.cmd_vel.publish(_twist_from_ros(msg.twist))
 
     def _on_ros_registered_scan(self, msg: ROSPointCloud2) -> None:
@@ -444,14 +469,14 @@ class ROSNav(Module):
         ts = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
         p = msg.pose.pose.position
         o = msg.pose.pose.orientation
-        self.odom.publish(
-            PoseStamped(
-                ts=ts,
-                frame_id=msg.header.frame_id,
-                position=Vector3(p.x, p.y, p.z),
-                orientation=Quaternion(o.x, o.y, o.z, o.w),
-            )
+        pose = PoseStamped(
+            ts=ts,
+            frame_id=msg.header.frame_id,
+            position=Vector3(p.x, p.y, p.z),
+            orientation=Quaternion(o.x, o.y, o.z, o.w),
         )
+        self._last_odom = pose
+        self.odom.publish(pose)
 
     def _on_ros_tf(self, msg: ROSTFMessage) -> None:
         ros_tf = _tfmessage_from_ros(msg)
@@ -478,11 +503,56 @@ class ROSNav(Module):
         )
 
     def _on_goal_pose(self, msg: PoseStamped) -> None:
-        self.navigate_to(msg)
+        self.set_goal(msg)
 
     def _on_cancel_goal(self, msg: Bool) -> None:
         if msg.data:
             self.stop()
+
+    def _on_stop_cmd(self, msg: Bool) -> None:
+        if not msg.data:
+            return
+        logger.info("Stop command received, cancelling navigation")
+        self.stop_navigation()
+        # Set goal to current position so the nav stack re-engages at standstill
+        if self._last_odom is not None:
+            self._set_autonomy_mode()
+            ros_pose = _pose_stamped_to_ros(self._last_odom)
+            self.goal_pose_pub.publish(ros_pose)
+
+    def _on_teleop_cmd_vel(self, msg: Twist) -> None:
+        with self._teleop_lock:
+            if not self._teleop_active:
+                self._teleop_active = True
+                self.stop_navigation()
+                logger.info("Teleop override: keyboard control active")
+
+            # Cancel existing cooldown timer and start a new one
+            if self._teleop_timer is not None:
+                self._teleop_timer.cancel()
+            self._teleop_timer = threading.Timer(
+                self.config.teleop_cooldown_sec,
+                self._end_teleop_override,
+            )
+            self._teleop_timer.daemon = True
+            self._teleop_timer.start()
+
+        # Forward teleop command to output
+        self.cmd_vel.publish(msg)
+
+    def _end_teleop_override(self) -> None:
+        with self._teleop_lock:
+            self._teleop_active = False
+            self._teleop_timer = None
+
+        # Set goal to current position so the nav stack resumes at standstill
+        if self._last_odom is not None:
+            logger.info("Teleop cooldown expired, setting goal to current position")
+            self._set_autonomy_mode()
+            ros_pose = _pose_stamped_to_ros(self._last_odom)
+            self.goal_pose_pub.publish(ros_pose)
+        else:
+            logger.warning("Teleop cooldown expired but no odom available")
 
     def _set_autonomy_mode(self) -> None:
         joy_msg = ROSJoy()  # type: ignore[no-untyped-call]
@@ -605,6 +675,9 @@ class ROSNav(Module):
         soft_stop_msg.data = 2
         self.soft_stop_pub.publish(soft_stop_msg)
 
+        # Unblock any waiting navigate_to() call
+        self._goal_reach = False
+
         with self._state_lock:
             self._navigation_state = NavigationState.IDLE
             self._current_goal = None
@@ -679,6 +752,12 @@ class ROSNav(Module):
         self.stop_navigation()
         try:
             self._running = False
+
+            with self._teleop_lock:
+                if self._teleop_timer is not None:
+                    self._teleop_timer.cancel()
+                    self._teleop_timer = None
+                self._teleop_active = False
 
             if self._spin_thread and self._spin_thread.is_alive():
                 self._spin_thread.join(timeout=1.0)

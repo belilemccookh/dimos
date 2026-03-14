@@ -21,6 +21,7 @@ from dimos.core.blueprints import autoconnect
 from dimos.navigation.replanning_a_star.module import replanning_a_star_planner
 from dimos.navigation.rosnav.rosnav_module import ROSNav
 from dimos.robot.unitree.g1.blueprints.basic.unitree_g1_onboard import unitree_g1_onboard
+from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
 
 unitree_g1_rosnav_onboard = autoconnect(
     unitree_g1_onboard,
@@ -35,6 +36,8 @@ unitree_g1_rosnav_onboard = autoconnect(
         lidar_gateway=os.getenv("ROSNAV_LIDAR_GATEWAY", "192.168.123.1"),
         lidar_ip=os.getenv("ROSNAV_LIDAR_IP", "192.168.123.120"),
     ),
-).global_config(n_workers=8, robot_model="unitree_g1")
+).remappings([
+    (WebsocketVisModule, "cmd_vel", "teleop_cmd_vel"),
+]).global_config(n_workers=8, robot_model="unitree_g1")
 
 __all__ = ["unitree_g1_rosnav_onboard"]

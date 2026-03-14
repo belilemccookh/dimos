@@ -35,7 +35,7 @@ from dimos.robot.unitree.g1.blueprints.primitive._vis import (
     _static_base_link,
 )
 from dimos.visualization.vis_module import vis_module
-from dimos.web.websocket_vis.websocket_vis_module import websocket_vis
+from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule, websocket_vis
 
 
 def _static_sim_pinhole(rr: Any) -> list[Any]:
@@ -69,7 +69,7 @@ def _static_sim_pinhole(rr: Any) -> list[Any]:
 _vis_sim = vis_module(
     viewer_backend=global_config.viewer,
     rerun_config={
-        "pubsubs": [LCM(autoconf=True)],
+        "pubsubs": [LCM()],
         "visual_override": {
             "world/camera_info": _convert_camera_info,
             "world/global_map": _convert_global_map,
@@ -87,6 +87,8 @@ unitree_g1_rosnav_sim = autoconnect(
     _mapper,
     websocket_vis(),
     ROSNav.blueprint(mode="simulation", vehicle_height=1.24),
-).global_config(n_workers=4, robot_model="unitree_g1")
+).remappings([
+    (WebsocketVisModule, "cmd_vel", "teleop_cmd_vel"),
+]).global_config(n_workers=4, robot_model="unitree_g1")
 
 __all__ = ["unitree_g1_rosnav_sim"]

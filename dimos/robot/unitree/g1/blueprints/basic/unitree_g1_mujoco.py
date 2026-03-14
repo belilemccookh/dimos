@@ -75,7 +75,7 @@ def _static_mujoco_pinhole(rr: Any) -> list[Any]:
 _vis_mujoco = vis_module(
     viewer_backend=global_config.viewer,
     rerun_config={
-        "pubsubs": [LCM(autoconf=True)],
+        "pubsubs": [LCM()],
         "visual_override": {
             "world/camera_info": _convert_camera_info,
             "world/global_map": _convert_global_map,

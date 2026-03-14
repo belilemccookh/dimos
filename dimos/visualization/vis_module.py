@@ -64,7 +64,7 @@ def vis_module(
     if rerun_config is None:
         rerun_config = {}
     rerun_config = {**rerun_config}
-    rerun_config.setdefault("pubsubs", [LCM(autoconf=True)])
+    rerun_config.setdefault("pubsubs", [LCM()])
 
     match viewer_backend:
         case "foxglove":
