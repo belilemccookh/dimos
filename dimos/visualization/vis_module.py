@@ -72,9 +72,10 @@ def vis_module(
 
             result = autoconnect(foxglove_bridge(**foxglove_config))
         case "rerun" | "rerun-web" | "rerun-connect":
-            from dimos.visualization.rerun.bridge import rerun_bridge
+            from dimos.visualization.rerun.bridge import _BACKEND_TO_MODE, rerun_bridge
 
-            result = autoconnect(rerun_bridge(**rerun_config))
+            viewer_mode = _BACKEND_TO_MODE.get(viewer_backend, "native")
+            result = autoconnect(rerun_bridge(viewer_mode=viewer_mode, **rerun_config))
         case _:
             result = autoconnect()
 
