@@ -59,7 +59,7 @@ endif()
 
 # --- Terrain Analysis ---
 add_executable(terrain_analysis
-  terrain_analysis/main.cpp
+  modules/terrain_analysis/main.cpp
 )
 target_include_directories(terrain_analysis PRIVATE ${SMARTNAV_COMMON_INCLUDES})
 target_link_libraries(terrain_analysis PRIVATE ${SMARTNAV_COMMON_LIBS})
@@ -67,7 +67,7 @@ target_link_directories(terrain_analysis PRIVATE ${SMARTNAV_COMMON_LIB_DIRS})
 
 # --- Local Planner ---
 add_executable(local_planner
-  local_planner/main.cpp
+  modules/local_planner/main.cpp
 )
 target_include_directories(local_planner PRIVATE ${SMARTNAV_COMMON_INCLUDES})
 target_link_libraries(local_planner PRIVATE ${SMARTNAV_COMMON_LIBS})
@@ -75,7 +75,7 @@ target_link_directories(local_planner PRIVATE ${SMARTNAV_COMMON_LIB_DIRS})
 
 # --- Path Follower ---
 add_executable(path_follower
-  path_follower/main.cpp
+  modules/path_follower/main.cpp
 )
 target_include_directories(path_follower PRIVATE ${SMARTNAV_COMMON_INCLUDES})
 target_link_libraries(path_follower PRIVATE ${SMARTNAV_COMMON_LIBS})
@@ -83,7 +83,7 @@ target_link_directories(path_follower PRIVATE ${SMARTNAV_COMMON_LIB_DIRS})
 
 # --- FAR Planner ---
 add_executable(far_planner
-  far_planner/main.cpp
+  modules/far_planner/main.cpp
 )
 target_include_directories(far_planner PRIVATE ${SMARTNAV_COMMON_INCLUDES})
 target_link_libraries(far_planner PRIVATE ${SMARTNAV_COMMON_LIBS})
@@ -100,7 +100,7 @@ endif()
 find_package(GTSAM QUIET)
 if(USE_PCL AND GTSAM_FOUND)
   add_executable(pgo
-    pgo/main.cpp
+    modules/pgo/main.cpp
   )
   target_include_directories(pgo PRIVATE ${SMARTNAV_COMMON_INCLUDES})
   target_link_libraries(pgo PRIVATE ${SMARTNAV_COMMON_LIBS} gtsam)
@@ -115,7 +115,7 @@ endif()
 find_package(Ceres QUIET)
 if(USE_PCL AND Ceres_FOUND)
   add_executable(arise_slam
-    arise_slam/main.cpp
+    modules/arise_slam/main.cpp
   )
   target_include_directories(arise_slam PRIVATE ${SMARTNAV_COMMON_INCLUDES})
   target_link_libraries(arise_slam PRIVATE ${SMARTNAV_COMMON_LIBS} Ceres::ceres)
@@ -124,7 +124,7 @@ endif()
 
 # --- TARE Planner ---
 add_executable(tare_planner
-  tare_planner/main.cpp
+  modules/tare_planner/main.cpp
 )
 target_include_directories(tare_planner PRIVATE ${SMARTNAV_COMMON_INCLUDES})
 target_link_libraries(tare_planner PRIVATE ${SMARTNAV_COMMON_LIBS})
