@@ -27,20 +27,13 @@ from dimos.control.components import (
 )
 from dimos.utils.data import LfsPath
 
-# Environment variables
-
 XARM7_IP = os.getenv("XARM7_IP")
 XARM6_IP = os.getenv("XARM6_IP")
 CAN_PORT = os.getenv("CAN_PORT", "can0")
 
-# Model paths
-
 PIPER_MODEL_PATH = LfsPath("piper_description/mujoco_model/piper_no_gripper_description.xml")
 XARM6_MODEL_PATH = LfsPath("xarm_description/urdf/xarm6/xarm6.urdf")
 XARM7_MODEL_PATH = LfsPath("xarm_description/urdf/xarm7/xarm7.urdf")
-
-
-# Hardware component factories
 
 
 def mock_arm(hw_id: str = "arm", n_joints: int = 7) -> HardwareComponent:
