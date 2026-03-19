@@ -43,4 +43,8 @@ class CallbackCollector:
 
     def wait(self) -> None:
         """Block until *n* items have been collected, or *timeout* expires."""
-        self._done.wait(self.timeout)
+        if not self._done.wait(self.timeout):
+            raise AssertionError(
+                f"Timed out after {self.timeout}s waiting for {self._n} messages "
+                f"(got {len(self.results)})"
+            )
