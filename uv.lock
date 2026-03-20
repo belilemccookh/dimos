@@ -24,6 +24,9 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')",
 ]
 
+[manifest]
+overrides = [{ name = "pytest", specifier = "==8.3.5" }]
+
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -1918,6 +1921,10 @@ misc = [
     { name = "xarm-python-sdk" },
     { name = "yapf" },
 ]
+navigation = [
+    { name = "gtsam", marker = "platform_machine != 'aarch64'" },
+    { name = "gtsam-develop", marker = "platform_machine == 'aarch64'" },
+]
 perception = [
     { name = "filterpy" },
     { name = "hydra-core" },
@@ -2012,6 +2019,8 @@ requires-dist = [
     { name = "filterpy", marker = "extra == 'perception'", specifier = ">=1.4.5" },
     { name = "gdown", marker = "extra == 'misc'", specifier = "==5.2.0" },
     { name = "googlemaps", marker = "extra == 'misc'", specifier = ">=4.10.0" },
+    { name = "gtsam", marker = "platform_machine != 'aarch64' and extra == 'navigation'", specifier = ">=4.2" },
+    { name = "gtsam-develop", marker = "platform_machine == 'aarch64' and extra == 'navigation'" },
     { name = "hydra-core", marker = "extra == 'perception'", specifier = ">=1.3.0" },
     { name = "ipykernel", marker = "extra == 'misc'" },
     { name = "kaleido", marker = "extra == 'manipulation'", specifier = ">=0.2.1" },
@@ -2150,7 +2159,7 @@ requires-dist = [
     { name = "xxhash", specifier = ">=3.0.0" },
     { name = "yapf", marker = "extra == 'misc'", specifier = "==0.40.2" },
 ]
-provides-extras = ["misc", "visualization", "agents", "web", "perception", "unitree", "manipulation", "cpu", "cuda", "dev", "psql", "sim", "drone", "dds", "docker", "base"]
+provides-extras = ["misc", "visualization", "agents", "web", "perception", "unitree", "manipulation", "cpu", "cuda", "dev", "psql", "sim", "navigation", "drone", "dds", "docker", "base"]
 
 [[package]]
 name = "dimos-lcm"
@@ -3018,6 +3027,46 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3c/05/33a7a4985586f27e1de4803887c417ec7ced145ebd069bc38a9607059e2b/grpcio-1.78.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:207db540302c884b8848036b80db352a832b99dfdf41db1eb554c2c2c7800f65", size = 7696837, upload-time = "2026-02-06T09:56:40.173Z" },
     { url = "https://files.pythonhosted.org/packages/73/77/7382241caf88729b106e49e7d18e3116216c778e6a7e833826eb96de22f7/grpcio-1.78.0-cp314-cp314-win32.whl", hash = "sha256:57bab6deef2f4f1ca76cc04565df38dc5713ae6c17de690721bdf30cb1e0545c", size = 4142439, upload-time = "2026-02-06T09:56:43.258Z" },
     { url = "https://files.pythonhosted.org/packages/48/b2/b096ccce418882fbfda4f7496f9357aaa9a5af1896a9a7f60d9f2b275a06/grpcio-1.78.0-cp314-cp314-win_amd64.whl", hash = "sha256:dce09d6116df20a96acfdbf85e4866258c3758180e8c49845d6ba8248b6d0bbb", size = 4929852, upload-time = "2026-02-06T09:56:45.885Z" },
+]
+
+[[package]]
+name = "gtsam"
+version = "4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and platform_machine != 'aarch64') or (python_full_version < '3.11' and sys_platform != 'linux')" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and platform_machine != 'aarch64') or (python_full_version >= '3.11' and sys_platform != 'linux')" },
+    { name = "pyparsing", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/3f/6325c300cc92ca2495570e41ab5dffc3147837d5fce77e243714c1d646dd/gtsam-4.2-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:e1c2958b5e8895ff5822114119e9b303fc12b2ded4c9ede0a7a6844f6eb7be1a", size = 21626497, upload-time = "2023-09-03T16:47:54.229Z" },
+    { url = "https://files.pythonhosted.org/packages/11/d8/ab317fdedeca03362d316c1b5c32cabc06f7a8948363f1c96d4a7f3fca8d/gtsam-4.2-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:b89d231f1de264d475ce1c0fcac320fdccb1260e2df01f8fb8775cdaddf57fb0", size = 19858294, upload-time = "2023-09-03T16:48:10.742Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/e1/8c87e6cc713f18be917fd110570e0646a132ab189781c551e4347d175170/gtsam-4.2-cp310-cp310-macosx_12_0_x86_64.whl", hash = "sha256:59d452e645f7ca598e89170785c9e8ac1b5a2b0a0d32bcda2c279b7b51bb379f", size = 21621183, upload-time = "2023-09-03T16:48:27.783Z" },
+    { url = "https://files.pythonhosted.org/packages/89/80/95d842fa51fef2223f3920f82ffea241bcc6f6b6ba6d7aa96c6e46e19474/gtsam-4.2-cp310-cp310-manylinux2014_x86_64.whl", hash = "sha256:979b7c886724ac403d5c323613fd9800c8ac7ab224e2909faa8b266e5de742b2", size = 21788738, upload-time = "2023-09-03T16:48:45.876Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/25/b380725edd25c7ab50814a544ffaa748af41fe639d5294818cf4e67b2584/gtsam-4.2-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:2996c349f03182df739f284adc62f455337b5272c4227bb970cbac7622b1d8e8", size = 21626506, upload-time = "2023-09-03T16:49:03.477Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/41/a7e26b58289f0f634123615fffa3c7eefd9b559cc1709d7c6ae67da7c87d/gtsam-4.2-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:0dc13b8a76ef862359a15ea9feec7cfd7df9d2bf2545b5f96297592c63e76aad", size = 20149822, upload-time = "2023-09-03T16:49:20.709Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/ba/d7b3ddccb179ca28db84edb7dd223aba6733ae9f59015b6263391bc8976b/gtsam-4.2-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:473978b6d32ab45903433a745ca166f0441058a726c7f26e9f51ce5aa2a03721", size = 21620301, upload-time = "2023-09-03T16:49:37.761Z" },
+    { url = "https://files.pythonhosted.org/packages/51/8e/a1cf54ea59c81b300d31f407270d8fe8b7e6fdcfd4c7353b0a0857602808/gtsam-4.2-cp311-cp311-manylinux2014_x86_64.whl", hash = "sha256:3793d5524a0417924fddb9d9662afc8129357fd52f07c422776024ddab3780c1", size = 22352720, upload-time = "2023-10-02T15:24:54.997Z" },
+]
+
+[[package]]
+name = "gtsam-develop"
+version = "4.3a1.dev202603171234"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pytest" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/0a/05aaa79ac5f1a4af2523e583e392f9fc72ee935a7402c9647d2669f0dcfc/gtsam_develop-4.3a1.dev202603171234-cp311-cp311-macosx_10_15_universal2.whl", hash = "sha256:209b8113bcc6e681e89182c0c7cc5020dd59fc667598138fb6872325bda31f8f", size = 40754398, upload-time = "2026-03-17T13:26:00.414Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/0e/dd122ad9b096a8cb976f28ef0c5f3edb1198939b23447cbdc11d96eff1c4/gtsam_develop-4.3a1.dev202603171234-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2ddd80f4d485619ed624bfbafc66baaa4536161b5523dc70e8b9b3b65c37cd03", size = 29014800, upload-time = "2026-03-17T13:26:03.471Z" },
+    { url = "https://files.pythonhosted.org/packages/25/9e/4a9efbf5ebca49c4db3d141300fb1da23d69e810f2ea1733292a59b18a69/gtsam_develop-4.3a1.dev202603171234-cp312-cp312-macosx_10_15_universal2.whl", hash = "sha256:d92cfad013020d022c9672dcb5fec19f9a249bad85c9330f5336c4b1898c861a", size = 40954472, upload-time = "2026-03-17T13:26:09.219Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/70/1035c171a5f80a4a86f9c6a6a51c141190002c67853e0935e2cf6e4ec0ba/gtsam_develop-4.3a1.dev202603171234-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:6b76d7721f1293af6742b1424735b0c3a92eef10ef667d4850b93c6d3982c5cf", size = 28998283, upload-time = "2026-03-17T13:26:11.963Z" },
+    { url = "https://files.pythonhosted.org/packages/66/fd/5c5866b5f7ea26b3e51e8443b9f4407a8fc34eb0c3622c4c166b9f52c0b5/gtsam_develop-4.3a1.dev202603171234-cp313-cp313-macosx_10_15_universal2.whl", hash = "sha256:e9982ec335a18ffe24888830b0e293bc4818c888523583327c8fac988a64158f", size = 40953486, upload-time = "2026-03-17T13:26:17.518Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/4e/074401f049f5a05b7b6e212d0e1950f997c5052307bf1174eea8ffc81e0b/gtsam_develop-4.3a1.dev202603171234-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b8010f783f4a5de6c9a2f08cf31b5ec029d38af2b6d961839f89a996ffd2ce90", size = 29000294, upload-time = "2026-03-17T13:26:20.775Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/ef/5029a47d89e41ff36dc2b6e815910eba2dea227209981fbef708afc452ba/gtsam_develop-4.3a1.dev202603171234-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:bc4f2571b7a0d9a34114ddac0fe10d434e6a7a84fbbab50737c4364fc7a250de", size = 40967006, upload-time = "2026-03-17T13:26:26.442Z" },
+    { url = "https://files.pythonhosted.org/packages/89/e5/42a6009b5f37584913f2fc7b3a505f30464193fdd0d68f2224139659f541/gtsam_develop-4.3a1.dev202603171234-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:6e678f1d84d73a09ce5715d0877ed97352ebbb6cf6d529ad82fda098afc8b84e", size = 29027556, upload-time = "2026-03-17T13:26:29.888Z" },
 ]
 
 [[package]]
