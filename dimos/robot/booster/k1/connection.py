@@ -15,7 +15,6 @@
 """Booster K1 connection module using the booster-rpc SDK."""
 
 import asyncio
-import logging
 import sys
 from threading import Lock, Thread
 import time
@@ -46,13 +45,14 @@ from dimos.msgs.sensor_msgs.CameraInfo import CameraInfo
 from dimos.msgs.sensor_msgs.Image import Image, ImageFormat
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.spec.perception import Camera, Pointcloud
+from dimos.utils.logging_config import setup_logger
 
 if sys.version_info < (3, 13):
     from typing_extensions import TypeVar
 else:
     from typing import TypeVar
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
 class ConnectionConfig(ModuleConfig):
