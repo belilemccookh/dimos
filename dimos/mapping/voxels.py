@@ -241,3 +241,8 @@ def ensure_legacy_pcd(
     )
 
     return pcd_any.to_legacy()
+
+
+def voxel_mapper(**kwargs):  # type: ignore[no-untyped-def]
+    """Convenience factory for VoxelGridMapper.blueprint(**kwargs)."""
+    return VoxelGridMapper.blueprint(**kwargs)
