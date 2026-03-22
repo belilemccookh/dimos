@@ -44,6 +44,8 @@ from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.utils.logging_config import setup_logger
 
+from dimos_lcm.std_msgs import Bool  # type: ignore[import-untyped]
+
 logger = setup_logger()
 
 
@@ -71,9 +73,11 @@ class RerunWebSocketServer(Module[Config]):
 
     clicked_point: Out[PointStamped]
     tele_cmd_vel: Out[Twist]
+    stop_explore_cmd: Out[Bool]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self._teleop_active = False
         self._ws_loop: asyncio.AbstractEventLoop | None = None
         self._server_thread: threading.Thread | None = None
         self._stop_event: asyncio.Event | None = None
@@ -182,10 +186,14 @@ class RerunWebSocketServer(Module[Config]):
                 ),
             )
             logger.debug(f"RerunWebSocketServer: twist → {twist}")
+            if not self._teleop_active:
+                self._teleop_active = True
+                self.stop_explore_cmd.publish(Bool(data=True))
             self.tele_cmd_vel.publish(twist)
 
         elif msg_type == "stop":
             logger.debug("RerunWebSocketServer: stop")
+            self._teleop_active = False
             self.tele_cmd_vel.publish(Twist.zero())
 
         elif msg_type == "heartbeat":

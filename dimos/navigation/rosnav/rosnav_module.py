@@ -321,8 +321,9 @@ class ROSNav(Module, NavigationInterface):
     ext_odometry: In[Odometry]
 
     lidar: Out[PointCloud2]
+    terrain_map: Out[PointCloud2]
     global_pointcloud: Out[PointCloud2]
-    overall_map: Out[PointCloud2]
+    rosnav_overall_map: Out[PointCloud2]
     odom: Out[PoseStamped]
     goal_active: Out[PoseStamped]
     goal_reached: Out[Bool]
@@ -387,12 +388,15 @@ class ROSNav(Module, NavigationInterface):
             ROSPointCloud2, "/registered_scan", self._on_ros_registered_scan, 10
         )
 
+        self.terrain_map_sub = self._node.create_subscription(
+            ROSPointCloud2, "/terrain_map", self._on_ros_terrain_map, 10
+        )
         self.global_pointcloud_sub = self._node.create_subscription(
             ROSPointCloud2, "/terrain_map_ext", self._on_ros_global_map, 10
         )
 
-        self.overall_map_sub = self._node.create_subscription(
-            ROSPointCloud2, "/overall_map", self._on_ros_overall_map, 10
+        self.rosnav_overall_map_sub = self._node.create_subscription(
+            ROSPointCloud2, "/overall_map", self._on_ros_rosnav_overall_map, 10
         )
 
         self.path_sub = self._node.create_subscription(ROSPath, "/path", self._on_ros_path, 10)
@@ -469,12 +473,15 @@ class ROSNav(Module, NavigationInterface):
     def _on_ros_registered_scan(self, msg: ROSPointCloud2) -> None:
         self.lidar.publish(_pc2_from_ros(msg))
 
+    def _on_ros_terrain_map(self, msg: "ROSPointCloud2") -> None:
+        self.terrain_map.publish(_pc2_from_ros(msg))
+
     def _on_ros_global_map(self, msg: ROSPointCloud2) -> None:
         self.global_pointcloud.publish(_pc2_from_ros(msg))
 
-    def _on_ros_overall_map(self, msg: ROSPointCloud2) -> None:
+    def _on_ros_rosnav_overall_map(self, msg: ROSPointCloud2) -> None:
         # FIXME: disabling for now for perf onboard G1 (and cause we don't have an overall map rn)
-        # self.overall_map.publish(_pc2_from_ros(msg))
+        # self.rosnav_overall_map.publish(_pc2_from_ros(msg))
         pass
 
 

@@ -27,6 +27,8 @@ UnityBridgeModule, which drives the simulated robot.
 from typing import Any
 
 from dimos.core.blueprints import autoconnect
+from dimos.mapping.costmapper import CostMapper
+from dimos.mapping.voxels import VoxelGridMapper
 from dimos.core.global_config import global_config
 from dimos.navigation.rosnav.rosnav_module import ROSNav
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
@@ -87,6 +89,11 @@ unitree_g1_rosnav_sim = (
             # to avoid colliding with ROSNav's own output streams of the same type.
             (UnityBridgeModule, "registered_scan", "ext_registered_scan"),
             (UnityBridgeModule, "odometry", "ext_odometry"),
+            # Feed local terrain data from nav stack to Unity for Z-height adjustment
+            # Rename VoxelGridMapper/CostMapper streams to avoid collisions
+            (VoxelGridMapper, "lidar", "global_pointcloud"),
+            (VoxelGridMapper, "global_map", "global_voxel_map"),
+            (CostMapper, "global_map", "global_voxel_map"),
             # Teleop: WebsocketVisModule cmd_vel → ROSNav tele_cmd_vel
             (WebsocketVisModule, "cmd_vel", "tele_cmd_vel"),
         ]
