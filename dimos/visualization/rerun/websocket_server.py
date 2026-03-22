@@ -121,6 +121,10 @@ class RerunWebSocketServer(Module[Config]):
             self._handle_client,
             host=self.config.host,
             port=self.config.port,
+            # Ping every 30 s, allow 30 s for pong — generous enough to
+            # survive brief network hiccups while still detecting dead clients.
+            ping_interval=30,
+            ping_timeout=30,
         ):
             self._server_ready.set()
             logger.info(
