@@ -57,6 +57,8 @@ logger = logging.getLogger(__name__)
 
 class ConnectionConfig(ModuleConfig):
     ip: str = Field(default_factory=lambda m: m["g"].robot_ip)
+    publish_tf: bool = True
+    """Publish TF transforms from raw odom. Disable when an external module (e.g. PGO) owns TF."""
 
 
 class Go2ConnectionProtocol(Protocol):
@@ -292,8 +294,9 @@ class GO2Connection(Module[_Config], Camera, Pointcloud):
         ]
 
     def _publish_tf(self, msg: PoseStamped) -> None:
-        transforms = self._odom_to_tf(msg)
-        self.tf.publish(*transforms)
+        if self.config.publish_tf:
+            transforms = self._odom_to_tf(msg)
+            self.tf.publish(*transforms)
         if self.odom.transport:
             self.odom.publish(msg)
 

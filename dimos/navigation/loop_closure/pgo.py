@@ -503,6 +503,27 @@ class PGO(Module[PGOConfig]):
         )
         self.odom._transport.publish(ps)
 
+        # Publish corrected TF so the robot box tracks corrected pose
+        from dimos.msgs.geometry_msgs.Quaternion import Quaternion
+        from dimos.msgs.geometry_msgs.Transform import Transform
+        from dimos.msgs.geometry_msgs.Vector3 import Vector3
+
+        camera_link = Transform(
+            translation=Vector3(0.3, 0.0, 0.0),
+            rotation=Quaternion(0.0, 0.0, 0.0, 1.0),
+            frame_id="base_link",
+            child_frame_id="camera_link",
+            ts=ts,
+        )
+        camera_optical = Transform(
+            translation=Vector3(0.0, 0.0, 0.0),
+            rotation=Quaternion(-0.5, 0.5, -0.5, 0.5),
+            frame_id="camera_link",
+            child_frame_id="camera_optical",
+            ts=ts,
+        )
+        self.tf.publish(Transform.from_pose("base_link", ps), camera_link, camera_optical)
+
     def _publish_loop(self) -> None:
         """Periodically publish global map."""
         pgo = self._pgo

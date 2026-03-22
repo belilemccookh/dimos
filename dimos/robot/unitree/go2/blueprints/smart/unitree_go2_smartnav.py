@@ -43,6 +43,7 @@ from dimos.robot.unitree.go2.connection import GO2Connection
 unitree_go2_smartnav = (
     autoconnect(
         unitree_go2_basic,
+        GO2Connection.blueprint(publish_tf=False),
         PGO.blueprint(),
         ScanCorrector.blueprint(),
         VoxelGridMapper.blueprint(voxel_size=0.1),
