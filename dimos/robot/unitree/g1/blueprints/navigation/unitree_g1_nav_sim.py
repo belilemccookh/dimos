@@ -47,8 +47,9 @@ from dimos.navigation.smartnav.modules.sensor_scan_generation.sensor_scan_genera
 from dimos.navigation.smartnav.modules.terrain_analysis.terrain_analysis import TerrainAnalysis
 from dimos.navigation.smartnav.modules.terrain_map_ext.terrain_map_ext import TerrainMapExt
 from dimos.navigation.smartnav.modules.unity_bridge.unity_bridge import UnityBridgeModule
+from dimos.core.global_config import global_config
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
-from dimos.visualization.rerun.bridge import _resolve_viewer_mode, rerun_bridge
+from dimos.visualization.vis_module import vis_module
 
 
 def _rerun_blueprint() -> Any:
@@ -63,25 +64,28 @@ def _rerun_blueprint() -> Any:
     )
 
 
-_rerun_config = {
-    "blueprint": _rerun_blueprint,
-    "pubsubs": [LCM()],
-    "min_interval_sec": 0.25,
-    "visual_override": {
-        "world/camera_info": UnityBridgeModule.rerun_suppress_camera_info,
-        "world/sensor_scan": sensor_scan_override,
-        "world/terrain_map": terrain_map_override,
-        "world/terrain_map_ext": terrain_map_ext_override,
-        "world/path": path_override,
-        "world/way_point": waypoint_override,
-        "world/goal_path": goal_path_override,
+_vis = vis_module(
+    viewer_backend=global_config.viewer,
+    rerun_config={
+        "blueprint": _rerun_blueprint,
+        "pubsubs": [LCM()],
+        "min_interval_sec": 0.25,
+        "visual_override": {
+            "world/camera_info": UnityBridgeModule.rerun_suppress_camera_info,
+            "world/sensor_scan": sensor_scan_override,
+            "world/terrain_map": terrain_map_override,
+            "world/terrain_map_ext": terrain_map_ext_override,
+            "world/path": path_override,
+            "world/way_point": waypoint_override,
+            "world/goal_path": goal_path_override,
+        },
+        "static": {
+            "world/color_image": UnityBridgeModule.rerun_static_pinhole,
+            "world/floor": static_floor,
+            "world/tf/robot": static_robot,
+        },
     },
-    "static": {
-        "world/color_image": UnityBridgeModule.rerun_static_pinhole,
-        "world/floor": static_floor,
-        "world/tf/robot": static_robot,
-    },
-}
+)
 
 unitree_g1_nav_sim = autoconnect(
     UnityBridgeModule.blueprint(
@@ -131,7 +135,7 @@ unitree_g1_nav_sim = autoconnect(
     ),
     ClickToGoal.blueprint(),
     # GlobalMap disabled — global map comes from the PCL native module instead.
-    rerun_bridge(viewer_mode=_resolve_viewer_mode(), **_rerun_config),
+    _vis,
 ).global_config(n_workers=8, robot_model="unitree_g1", simulation=True)
 
 
