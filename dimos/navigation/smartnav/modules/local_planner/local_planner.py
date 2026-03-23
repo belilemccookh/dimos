@@ -30,6 +30,7 @@ from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.nav_msgs.Path import Path
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.data import get_data
+from dimos.utils.change_detect import Glob, PathEntry
 
 
 def _default_paths_dir() -> str:
@@ -43,9 +44,9 @@ class LocalPlannerConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/local_planner"
     build_command: str | None = "nix build . -o result"
-    rebuild_on_change: list[str] | None = [
+    rebuild_on_change: list[PathEntry] | None = [
         "main.cpp",
-        "../../common/*.hpp",
+        Glob("../../common/*.hpp"),
         "CMakeLists.txt",
         "flake.nix",
     ]
