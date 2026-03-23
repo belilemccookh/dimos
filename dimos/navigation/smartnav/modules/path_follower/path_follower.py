@@ -25,6 +25,7 @@ from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.nav_msgs.Path import Path
+from dimos.utils.change_detect import Glob, PathEntry
 
 
 class PathFollowerConfig(NativeModuleConfig):
@@ -33,9 +34,9 @@ class PathFollowerConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/path_follower"
     build_command: str | None = "nix build . -o result"
-    rebuild_on_change: list[str] | None = [
+    rebuild_on_change: list[PathEntry] | None = [
         "main.cpp",
-        "../../common/*.hpp",
+        Glob("../../common/*.hpp"),
         "CMakeLists.txt",
         "flake.nix",
     ]

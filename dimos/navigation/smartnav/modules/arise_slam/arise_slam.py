@@ -27,6 +27,7 @@ from dimos.core.stream import In, Out
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.utils.change_detect import Glob, PathEntry
 
 
 class AriseSLAMConfig(NativeModuleConfig):
@@ -35,9 +36,9 @@ class AriseSLAMConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/arise_slam"
     build_command: str | None = "nix build . -o result"
-    rebuild_on_change: list[str] | None = [
+    rebuild_on_change: list[PathEntry] | None = [
         "main.cpp",
-        "../../common/*.hpp",
+        Glob("../../common/*.hpp"),
         "flake.nix",
         "CMakeLists.txt",
     ]

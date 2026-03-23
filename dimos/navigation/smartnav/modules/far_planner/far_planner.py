@@ -26,6 +26,7 @@ from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PointStamped import PointStamped
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.utils.change_detect import Glob, PathEntry
 
 
 class FarPlannerConfig(NativeModuleConfig):
@@ -34,9 +35,9 @@ class FarPlannerConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/far_planner"
     build_command: str | None = "nix build . -o result"
-    rebuild_on_change: list[str] | None = [
+    rebuild_on_change: list[PathEntry] | None = [
         "main.cpp",
-        "../../common/*.hpp",
+        Glob("../../common/*.hpp"),
         "CMakeLists.txt",
         "flake.nix",
     ]

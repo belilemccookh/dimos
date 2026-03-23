@@ -24,6 +24,7 @@ from dimos.core.native_module import NativeModule, NativeModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.utils.change_detect import Glob, PathEntry
 
 
 class TerrainAnalysisConfig(NativeModuleConfig):
@@ -32,9 +33,9 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/terrain_analysis"
     build_command: str | None = "nix build . -o result"
-    rebuild_on_change: list[str] | None = [
+    rebuild_on_change: list[PathEntry] | None = [
         "main.cpp",
-        "../../common/*.hpp",
+        Glob("../../common/*.hpp"),
         "CMakeLists.txt",
         "flake.nix",
     ]
