@@ -39,6 +39,7 @@ from dimos.navigation.smartnav.blueprints._rerun_helpers import (
     waypoint_override,
 )
 from dimos.navigation.smartnav.modules.click_to_goal.click_to_goal import ClickToGoal
+from dimos.navigation.smartnav.modules.cmd_vel_mux import CmdVelMux
 from dimos.navigation.smartnav.modules.local_planner.local_planner import LocalPlanner
 from dimos.navigation.smartnav.modules.path_follower.path_follower import PathFollower
 from dimos.navigation.smartnav.modules.sensor_scan_generation.sensor_scan_generation import (
@@ -134,8 +135,13 @@ unitree_g1_nav_sim = autoconnect(
         ]
     ),
     ClickToGoal.blueprint(),
-    # GlobalMap disabled — global map comes from the PCL native module instead.
+    CmdVelMux.blueprint(),
     _vis,
+).remappings(
+    [
+        # PathFollower cmd_vel → CmdVelMux nav input (avoid name collision with mux output)
+        (PathFollower, "cmd_vel", "nav_cmd_vel"),
+    ]
 ).global_config(n_workers=8, robot_model="unitree_g1", simulation=True)
 
 
