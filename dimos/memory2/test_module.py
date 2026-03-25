@@ -184,3 +184,38 @@ def test_stream_module_with_transformer_pipeline() -> None:
     stream_names = {s.name for s in atom.streams}
     assert "numbers" in stream_names
     assert "doubled" in stream_names
+
+
+def test_stream_module_with_method_pipeline() -> None:
+    """StreamModule accepts a method pipeline with access to self.config."""
+    from dimos.core.module import ModuleConfig
+    from dimos.core.stream import In, Out
+    from dimos.memory2.module import StreamModule
+
+    class MyConfig(ModuleConfig):
+        factor: int = 3
+
+    class Double(Transformer[int, int]):
+        def __init__(self, factor: int = 2) -> None:
+            self.factor = factor
+
+        def __call__(self, upstream: Iterator[Observation[int]]) -> Iterator[Observation[int]]:
+            for obs in upstream:
+                yield obs.derive(data=obs.data * self.factor)
+
+    class Multiplier(StreamModule[MyConfig]):
+        default_config = MyConfig
+
+        def pipeline(self, stream: Stream) -> Stream:
+            return stream.transform(Double(factor=self.config.factor))
+
+        numbers: In[int]
+        result: Out[int]
+
+    bp = Multiplier.blueprint(factor=5)
+
+    assert len(bp.blueprints) == 1
+    atom = bp.blueprints[0]
+    stream_names = {s.name for s in atom.streams}
+    assert "numbers" in stream_names
+    assert "result" in stream_names

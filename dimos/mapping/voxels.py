@@ -17,6 +17,11 @@ import time
 import open3d as o3d  # type: ignore[import-untyped]
 import open3d.core as o3c  # type: ignore[import-untyped]
 
+from dimos.core.module import ModuleConfig
+from dimos.core.stream import In, Out
+from dimos.memory2.module import StreamModule
+from dimos.memory2.stream import Stream
+from dimos.memory2.voxel_map import VoxelMap
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.decorators.decorators import simple_mcache
 from dimos.utils.logging_config import setup_logger
@@ -67,7 +72,7 @@ class VoxelGrid:
         self._latest_frame_ts: float = 0.0
 
     def add_frame(self, frame: PointCloud2) -> None:
-        if hasattr(frame, "ts") and frame.ts:
+        if frame.ts is not None:
             self._latest_frame_ts = frame.ts
 
         pcd = ensure_tensor_pcd(frame.pointcloud, self._dev)
@@ -152,13 +157,6 @@ class VoxelGrid:
         self._voxel_hashmap = None  # type: ignore[assignment]
 
 
-from dimos.core.module import ModuleConfig
-from dimos.core.stream import In, Out
-from dimos.memory2.module import StreamModule
-from dimos.memory2.stream import Stream
-from dimos.memory2.voxel_map import VoxelMap
-
-
 class VoxelGridMapperConfig(ModuleConfig):
     """Configuration for VoxelGridMapper."""
 
@@ -215,5 +213,4 @@ def ensure_legacy_pcd(
         "Input must be a legacy PointCloud or a tensor PointCloud"
     )
 
-    return pcd_any.to_legacy()
     return pcd_any.to_legacy()

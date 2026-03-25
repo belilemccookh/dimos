@@ -46,6 +46,10 @@ class StreamModule(Module[ModuleConfigT]):
 
     On start, the single ``In`` port feeds a MemoryStore, and the pipeline
     is applied to the live stream, publishing results to the single ``Out`` port.
+
+    The MemoryStore acts as a bridge between the push-based Module In port
+    and the pull-based memory2 stream pipeline — it also enables replay and
+    persistence if the store is swapped for a persistent backend later.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -84,7 +88,7 @@ class StreamModule(Module[ModuleConfigT]):
             )
 
         # Method pipeline: self.pipeline(stream) -> stream
-        if inspect.isfunction(pipeline):
+        if inspect.isfunction(pipeline) or inspect.ismethod(pipeline):
             result: Stream[Any] = pipeline(self, stream)
             return result
 
@@ -101,18 +105,18 @@ class StreamModule(Module[ModuleConfigT]):
     def _resolve_ports(self) -> tuple[str, type, str]:
         """Find the single In and single Out port from type annotations."""
         hints = get_type_hints(self.__class__, include_extras=True)
-        in_name: str | None = None
-        in_type: type | None = None
-        out_name: str | None = None
+        in_ports: list[tuple[str, type]] = []
+        out_ports: list[str] = []
         for name, ann in hints.items():
             origin = get_origin(ann)
             if origin is In:
-                in_name = name
-                in_type = get_args(ann)[0]
+                in_ports.append((name, get_args(ann)[0]))
             elif origin is Out:
-                out_name = name
-        if in_name is None or in_type is None or out_name is None:
+                out_ports.append(name)
+        if len(in_ports) != 1 or len(out_ports) != 1:
             raise TypeError(
-                f"{self.__class__.__name__} must declare exactly one In[T] and one Out[T] port"
+                f"{self.__class__.__name__} must declare exactly one In[T] and one Out[T] port, "
+                f"found {len(in_ports)} In and {len(out_ports)} Out"
             )
-        return in_name, in_type, out_name
+        in_name, in_type = in_ports[0]
+        return in_name, in_type, out_ports[0]

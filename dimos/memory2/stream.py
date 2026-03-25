@@ -389,6 +389,12 @@ class Stream(Resource, Generic[T]):
                 result = result.transform(xf)
             for f in query.filters:
                 result = result._with_filter(f)
+            if query.limit_val is not None:
+                result = result.limit(query.limit_val)
+            if query.offset_val:
+                result = result.offset(query.offset_val)
+            if query.order_field is not None:
+                result = result.order_by(query.order_field, desc=query.order_desc)
         return result  # type: ignore[return-value]
 
     def append(
