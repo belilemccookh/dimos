@@ -35,6 +35,15 @@ logger = setup_logger()
 
 
 class ModuleCoordinator(Resource):  # type: ignore[misc]
+    """
+    There should only ever be one module coordinator instance (this is a singleton)
+    - Module (classes) should be able to be deployed, stopped, and re-deployed in on one instance of ModuleCoordinator
+    - Arguably ModuleCoordinator could be called the "DimosRuntime"
+    - ModuleCoordinator is responsible for all global "addresses".
+      Ex: it should make sure all modules are using the same LCM url, the same rerun port, etc
+      (it may not do all of that at time of writing but that is the intention/job of this class)
+    - Modules shouldn't be deployed on their own (except for testing)
+    """
     _client: WorkerManager | None = None
     _global_config: GlobalConfig
     _n: int | None = None
