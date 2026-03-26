@@ -358,7 +358,16 @@ class RerunBridgeModule(Module[Config]):
             server_uri = rr.serve_grpc()
             rr.serve_web_viewer(connect_to=server_uri, open_browser=False)
         elif self.config.viewer_mode == "connect":
-            rr.connect_grpc(self.config.connect_url)
+            # Serve gRPC so external viewers (dimos-viewer) can connect to us.
+            # Extract the port from the connect_url to match what viewers expect.
+            from urllib.parse import urlparse
+
+            parsed = urlparse(self.config.connect_url.replace("rerun+", "", 1))
+            grpc_port = parsed.port or RERUN_GRPC_PORT
+            rr.serve_grpc(
+                grpc_port=grpc_port,
+                server_memory_limit=self.config.memory_limit,
+            )
             _log_viewer_connect_hints(self.config.connect_url)
         # "none" - just init, no viewer (connect externally)
 
