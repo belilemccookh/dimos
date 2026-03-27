@@ -249,8 +249,8 @@ class TwitchChat(Module["TwitchChatConfig"]):
     def _run_bot(self) -> None:
         """Run the TwitchIO bot in its own asyncio loop."""
         try:
-            from twitchio.ext import (
-                commands as twitch_commands,  # type: ignore[import-untyped,import-not-found]
+            from twitchio.ext import (  # type: ignore[import-not-found]
+                commands as twitch_commands,  # type: ignore[import-untyped]
             )
 
             module_ref = self
