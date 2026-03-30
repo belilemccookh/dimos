@@ -89,11 +89,6 @@ class ViewTransform:
         return world_dist / (self.wx_max - self.wx_min) * self.svg_width
 
 
-# ---------------------------------------------------------------------------
-# Bounds collection
-# ---------------------------------------------------------------------------
-
-
 def _collect_bounds(el: Any, xs: list[float], ys: list[float]) -> None:
     if isinstance(el, (Pose, Arrow)):
         xs.append(el.msg.x)
@@ -120,11 +115,6 @@ def _collect_bounds(el: Any, xs: list[float], ys: list[float]) -> None:
         ox, oy = el.origin.x, el.origin.y
         xs.extend([ox, ox + el.width * el.resolution])
         ys.extend([oy, oy + el.height * el.resolution])
-
-
-# ---------------------------------------------------------------------------
-# Per-type SVG renderers
-# ---------------------------------------------------------------------------
 
 
 def _render_point(el: Point, vt: ViewTransform) -> str:
@@ -271,10 +261,6 @@ def _render_occupancy_grid(el: OccupancyGrid, vt: ViewTransform) -> str:
         f'href="data:image/png;base64,{b64}" image-rendering="pixelated"/>'
     )
 
-
-# ---------------------------------------------------------------------------
-# Main render
-# ---------------------------------------------------------------------------
 
 _ARROWHEAD_MARKER = (
     '<defs><marker id="ah" markerWidth="8" markerHeight="6" '

@@ -199,6 +199,16 @@ class Stream(CompositeResource, Generic[T]):
         """Filter by arbitrary predicate on the full Observation."""
         return self._with_filter(PredicateFilter(pred))
 
+    def tap(self, fn: Callable[[Observation[T]], Any]) -> Stream[T]:
+        """Call *fn* on each observation without changing it."""
+
+        def _tap(upstream: Iterator[Observation[T]]) -> Iterator[Observation[T]]:
+            for obs in upstream:
+                fn(obs)
+                yield obs
+
+        return self.transform(FnIterTransformer(_tap))
+
     def map(self, fn: Callable[[Observation[T]], Observation[R]]) -> Stream[R]:
         """Transform each observation's data via callable."""
         return self.transform(FnTransformer(lambda obs: fn(obs)))

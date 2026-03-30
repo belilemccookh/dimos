@@ -21,13 +21,14 @@ observations (smart dispatch based on data type).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from dimos.memory2.type.observation import EmbeddedObservation, Observation
 from dimos.memory2.vis.type import (
     Arrow,
     Box3D,
     Camera,
+    Color,
     Point,
     Polyline,
     Pose,
@@ -42,20 +43,20 @@ from dimos.msgs.nav_msgs.Path import Path as NavPath
 from dimos.msgs.protocol import DimosMsg
 from dimos.msgs.vision_msgs.Detection3D import Detection3D
 
-if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
 
-    from dimos.memory2.stream import Stream
+def color(value: float, lo: float = 0.0, hi: float = 1.0, cmap: str = "turbo") -> str:
+    """Map a value in [lo, hi] to a hex color string via a matplotlib colormap."""
+    import functools
 
+    import matplotlib.pyplot as plt
 
-def _similarity_color(similarity: float | None) -> str:
-    """Map similarity score [0, 1] to a red→blue color string."""
-    if similarity is None:
-        return "#888888"
-    t = max(0.0, min(1.0, similarity))
-    r = int(255 * t)
-    b = int(255 * (1 - t))
-    return f"#{r:02x}00{b:02x}"
+    @functools.lru_cache(maxsize=16)
+    def _cmap(name: str):  # type: ignore[no-untyped-def]
+        return plt.get_cmap(name)
+
+    t = max(0.0, min(1.0, (value - lo) / (hi - lo))) if hi != lo else 0.5
+    r, g, b, _ = _cmap(cmap)(t)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
 
 class Drawing:
@@ -66,6 +67,7 @@ class Drawing:
     - Raw dimos msgs with style kwargs: ``d.add(posestamped, color="red")``
     - Observations (smart dispatch): ``d.add(observation)``
     - Lists of EmbeddedObservations: ``d.add(results)`` → similarity heatmap
+    - Streams: ``d.add(stream)`` → materializes and adds each obs.data
     """
 
     def __init__(self) -> None:
@@ -82,11 +84,14 @@ class Drawing:
         if isinstance(element, (Pose, Arrow, Point, Box3D, Camera, Polyline, Text)):
             self._elements.append(element)
         elif isinstance(element, DimosMsg):
-            self.add_msg(element, **kwargs)
+            self.add_dimos_msg(element, **kwargs)
         elif isinstance(element, EmbeddedObservation):
-            self.add_embeddedobservation(element, **kwargs)
+            self.add_embedded_observation(element, **kwargs)
         elif isinstance(element, Observation):
             self.add_observation(element, **kwargs)
+        elif hasattr(element, "__iter__"):
+            for item in element:
+                self.add(item, **kwargs)
         else:
             raise TypeError(
                 f"Drawing.add() does not know how to handle {type(element).__name__}. "
@@ -95,7 +100,7 @@ class Drawing:
 
         return self
 
-    def add_msg(self, msg: DimosMsg, **kwargs: Any) -> None:
+    def add_dimos_msg(self, msg: DimosMsg, **kwargs: Any) -> None:
         """Dispatch a DimosMsg to its default vis type."""
         if isinstance(msg, PoseStamped):
             self._elements.append(Pose(msg=msg, **kwargs))
@@ -122,15 +127,12 @@ class Drawing:
                 f"Wrap it explicitly (e.g. Pose(msg), Arrow(msg))."
             )
 
-    def add_embeddedobservation(self, obs: EmbeddedObservation[Any], **kwargs: Any) -> None:
-        """Render an embedded observation as a similarity-colored dot."""
-        color = _similarity_color(obs.similarity)
+    def add_embedded_observation(self, obs: EmbeddedObservation[Any], **kwargs: Any) -> None:
+        """Render an embedded observation as a similarity-colored arrow."""
         self._elements.append(
-            Point(
+            Arrow(
                 msg=obs.pose_stamped,
-                color=color,
-                radius=kwargs.get("radius", 0.15),
-                label=kwargs.get("label", None),
+                color=Color("similarity", obs.similarity or 0.0, cmap="turbo"),
             )
         )
 
@@ -154,55 +156,30 @@ class Drawing:
         """Add an OccupancyGrid as the background map."""
         return self.add(grid)
 
-    def path(
-        self,
-        source: Stream[Any] | Iterable[Observation[Any]],
-        color: str = "#3498db",
-        width: float = 0.05,
-    ) -> Drawing:
-        """Draw a polyline through all observation poses."""
-        from dimos.msgs.nav_msgs.Path import Path as NavPath
+    def _resolve_colors(self) -> None:
+        """Resolve all Color objects to hex strings using per-group auto-ranging."""
+        groups: dict[str, list[float]] = {}
+        for el in self._elements:
+            c = getattr(el, "color", None)
+            if isinstance(c, Color) and c.value is not None:
+                groups.setdefault(c.group, []).append(c.value)
 
-        obs_list = self._materialize(source)
-        poses = [o.pose_stamped for o in obs_list]
-        self._elements.append(Polyline(msg=NavPath(poses=poses), color=color, width=width))
-        return self
+        if not groups:
+            return
 
-    def poses(
-        self,
-        source: Stream[Any] | Iterable[Observation[Any]],
-        color: str = "#e74c3c",
-        size: float = 0.3,
-    ) -> Drawing:
-        """Draw each observation as a Pose (circle + heading arrow)."""
-        for obs in self._materialize(source):
-            self._elements.append(Pose(msg=obs.pose_stamped, color=color, size=size))
-        return self
+        ranges = {g: (min(vs), max(vs)) for g, vs in groups.items()}
 
-    def markers(
-        self,
-        source: Stream[Any] | Iterable[Observation[Any]],
-        label: Callable[[Any], str] | str | None = None,
-        color: str = "#2ecc71",
-        radius: float = 0.2,
-    ) -> Drawing:
-        """Draw each observation as a labeled Point."""
-        for obs in self._materialize(source):
-            lbl = label(obs) if callable(label) else label
-            self._elements.append(
-                Point(
-                    msg=obs.pose_stamped,
-                    color=color,
-                    radius=radius,
-                    label=lbl,
-                )
-            )
-        return self
+        for el in self._elements:
+            c = getattr(el, "color", None)
+            if isinstance(c, Color) and c.value is not None:
+                lo, hi = ranges[c.group]
+                el.color = color(c.value, lo, hi, c.cmap)
 
     def to_svg(self, path: str | None = None) -> str:
         """Render to SVG string. Optionally write to file."""
         from dimos.memory2.vis.svg import render
 
+        self._resolve_colors()
         svg = render(self)
         if path is not None:
             with open(path, "w") as f:
@@ -212,15 +189,6 @@ class Drawing:
     def _repr_svg_(self) -> str:
         """Jupyter inline display."""
         return self.to_svg()
-
-    @staticmethod
-    def _materialize(source: Any) -> list[Any]:
-        """Convert a Stream or iterable to a list of observations."""
-        from dimos.memory2.stream import Stream
-
-        if isinstance(source, Stream):
-            return source.fetch()
-        return list(source)
 
     @property
     def elements(self) -> list[SceneElement]:
@@ -235,7 +203,5 @@ class Drawing:
         for el in self._elements:
             name = type(el).__name__
             counts[name] = counts.get(name, 0) + 1
-        parts = [f"{n}={c}" for n, c in sorted(counts.items())]
-        return f"Drawing({', '.join(parts)})"
         parts = [f"{n}={c}" for n, c in sorted(counts.items())]
         return f"Drawing({', '.join(parts)})"

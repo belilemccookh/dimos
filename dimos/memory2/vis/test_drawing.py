@@ -18,8 +18,8 @@ import numpy as np
 import pytest
 
 from dimos.memory2.type.observation import EmbeddedObservation, Observation
-from dimos.memory2.vis.drawing import Drawing, _similarity_color
-from dimos.memory2.vis.type import Arrow, Box3D, Camera, Point, Polyline, Pose, Text
+from dimos.memory2.vis.drawing import Drawing, color
+from dimos.memory2.vis.type import Arrow, Box3D, Camera, Color, Point, Polyline, Pose, Text
 from dimos.msgs.geometry_msgs.Point import Point as GeoPoint
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
@@ -189,7 +189,7 @@ class TestDrawingObservations:
         assert isinstance(el, Pose)
         assert el.msg.x == pytest.approx(5.0)
 
-    def test_embedded_observation_becomes_colored_point(self):
+    def test_embedded_observation_becomes_deferred_color_arrow(self):
         obs = EmbeddedObservation(
             id=0,
             ts=0.0,
@@ -202,36 +202,79 @@ class TestDrawingObservations:
         d.add(obs)
         assert len(d) == 1
         el = d.elements[0]
-        assert isinstance(el, Point)
-        # similarity=0.8 → mostly red
-        assert el.color == _similarity_color(0.8)
+        assert isinstance(el, Arrow)
+        assert isinstance(el.color, Color)
+        assert el.color.value == 0.8
 
-    def test_embedded_observations_loop(self):
+    def test_embedded_observations_auto_range(self):
+        """Packed similarities (0.8-0.95) should span the full colormap."""
         results = [
             EmbeddedObservation(
                 id=i,
                 ts=float(i),
                 pose=(i, i * 0.5, 0, 0, 0, 0, 1),
                 _data="x",
-                similarity=i / 4.0,
+                similarity=s,
             )
-            for i in range(5)
+            for i, s in enumerate([0.80, 0.85, 0.90, 0.95])
         ]
 
         d = Drawing()
         for obs in results:
             d.add(obs)
-        assert len(d) == 5
-        for el in d.elements:
-            assert isinstance(el, Point)
 
-        # similarity=0 → blue, similarity=1 → red
-        assert d.elements[0].color == "#0000ff"  # sim=0.0
-        assert d.elements[4].color == "#ff0000"  # sim=1.0
+        d._resolve_colors()
+
+        for el in d.elements:
+            assert isinstance(el, Arrow)
+            assert isinstance(el.color, str)
+
+        # lo=0.80, hi=0.95 → first maps to 0.0, last to 1.0
+        assert d.elements[0].color == color(0.80, 0.80, 0.95, cmap="turbo")
+        assert d.elements[3].color == color(0.95, 0.80, 0.95, cmap="turbo")
+        # All 4 should be distinct
+        colors = [el.color for el in d.elements]
+        assert len(set(colors)) == 4
+
+
+class TestColor:
+    """Color deferred coloring and factory pattern."""
+
+    def test_factory_pattern(self):
+        speed = Color("speed", cmap="turbo")
+        c = speed(2.5)
+        assert c.group == "speed"
+        assert c.value == 2.5
+        assert c.cmap == "turbo"
+
+    def test_separate_groups_get_separate_ranges(self):
+        d = Drawing()
+        # Speed values: 1-5
+        for v in [1.0, 3.0, 5.0]:
+            d.add(Point(GeoPoint(v, 0, 0), color=Color("speed", v, cmap="turbo")))
+        # Similarity values: 0.8-0.95
+        for v in [0.80, 0.95]:
+            d.add(Point(GeoPoint(0, v, 0), color=Color("sim", v, cmap="RdYlBu_r")))
+
+        d._resolve_colors()
+
+        # Speed endpoints map to cmap(0.0) and cmap(1.0)
+        assert d.elements[0].color == color(1.0, 1.0, 5.0, "turbo")
+        assert d.elements[2].color == color(5.0, 1.0, 5.0, "turbo")
+        # Similarity endpoints map to cmap(0.0) and cmap(1.0)
+        assert d.elements[3].color == color(0.80, 0.80, 0.95, "RdYlBu_r")
+        assert d.elements[4].color == color(0.95, 0.80, 0.95, "RdYlBu_r")
+
+    def test_plain_string_color_unaffected(self):
+        d = Drawing()
+        d.add(Point(GeoPoint(0, 0, 0), color="green"))
+        d.add(Point(GeoPoint(1, 0, 0), color=Color("x", 1.0)))
+        d._resolve_colors()
+        assert d.elements[0].color == "green"
 
 
 class TestDrawingConvenience:
-    """Drawing convenience methods: base_map, path, poses, markers."""
+    """Drawing convenience methods: base_map."""
 
     def test_base_map(self):
         grid = OccupancyGrid()
@@ -239,45 +282,14 @@ class TestDrawingConvenience:
         assert len(d) == 1
         assert isinstance(d.elements[0], OccupancyGrid)
 
-    def test_path_from_observations(self):
-        obs_list = [
-            Observation(id=i, ts=float(i), pose=(i, i * 0.5, 0, 0, 0, 0, 1), _data="x")
-            for i in range(5)
-        ]
-
-        d = Drawing().path(obs_list, color="blue", width=0.1)
-        assert len(d) == 1
-        el = d.elements[0]
-        assert isinstance(el, Polyline)
-        assert el.color == "blue"
-        assert len(el.msg.poses) == 5
-
-    def test_poses_from_observations(self):
-        obs_list = [
-            Observation(id=i, ts=float(i), pose=(i, 0, 0, 0, 0, 0, 1), _data="x") for i in range(3)
-        ]
-
-        d = Drawing().poses(obs_list, color="red", size=0.5)
+    def test_add_list_of_msgs(self):
+        poses = [PoseStamped(i, 0, 0) for i in range(3)]
+        d = Drawing()
+        d.add(poses, color="red")
         assert len(d) == 3
         for el in d.elements:
             assert isinstance(el, Pose)
             assert el.color == "red"
-            assert el.size == 0.5
-
-    def test_markers_with_label_callback(self):
-        obs_list = [
-            Observation(id=i, ts=float(i), pose=(i, 0, 0, 0, 0, 0, 1), _data="x") for i in range(3)
-        ]
-
-        d = Drawing().markers(obs_list, label=lambda o: f"id={o.id}", color="green")
-        assert len(d) == 3
-        assert d.elements[0].label == "id=0"
-        assert d.elements[2].label == "id=2"
-
-    def test_markers_with_static_label(self):
-        obs_list = [Observation(id=0, ts=0.0, pose=(0, 0, 0, 0, 0, 0, 1), _data="x")]
-        d = Drawing().markers(obs_list, label="fixed")
-        assert d.elements[0].label == "fixed"
 
 
 class TestDrawingRepr:
