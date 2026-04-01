@@ -194,7 +194,10 @@ class Config(ModuleConfig):
     # Static items logged once after start. Maps entity_path -> callable(rr) returning Archetype
     static: dict[str, Callable[[Any], Archetype]] = field(default_factory=dict)
 
-    min_interval_sec: float = 0.1  # Rate-limit per entity path (default: 10 Hz max)
+    min_interval_sec: float = 0  # Rate-limit per entity path (default: 10 Hz max)
+    drop_at_latency_ms: float = (
+        0  # Drop heavy messages when latency exceeds this (ms). 0 = disabled.
+    )
     entity_prefix: str = "world"
     topic_to_entity: Callable[[Any], str] | None = None
     viewer_mode: ViewerMode = field(default_factory=_resolve_viewer_mode)
@@ -276,19 +279,53 @@ class RerunBridgeModule(Module[Config]):
         """Handle incoming message - log to rerun."""
         import rerun as rr
 
+        cb_enter = time.time()  # timestamp at callback entry
+
         # convert a potentially complex topic object into an str rerun entity path
         entity_path: str = self._get_entity_path(topic)
+
+        # Measure latency from sensor timestamp
+        msg_ts = getattr(msg, "ts", None)
+        latency_ms = (time.time() - msg_ts) * 1000 if (msg_ts and msg_ts > 1e9) else None
+        # Latency already present at callback entry (= time in LCM queue)
+        entry_latency_ms = (cb_enter - msg_ts) * 1000 if (msg_ts and msg_ts > 1e9) else None
+
+        # Drop heavy messages when the pipeline is behind.
+        # Measures latency from sensor timestamp to now — if it exceeds the
+        # threshold, skip this message to let the viewer catch up.
+        # Light messages (odom, TF, path) always pass through.
+        # if self.config.drop_at_latency_ms > 0 and isinstance(msg, _HEAVY_MSG_TYPES):
+        #     if latency_ms is not None and latency_ms > self.config.drop_at_latency_ms:
+        #         self._drop_count += 1
+        #         if self._debug_csv is not None:
+        #             self._debug_csv.write(
+        #                 f"{time.time():.3f},{entity_path},{latency_ms:.1f},1,0\n"
+        #             )
+        #         if self._drop_count % 100 == 1:
+        #             logger.info(
+        #                 f"drop_at_latency: dropping {entity_path} "
+        #                 f"(latency={latency_ms:.0f}ms > {self.config.drop_at_latency_ms}ms, "
+        #                 f"total_dropped={self._drop_count})"
+        #             )
+        #         return
+
+        # Print latency periodically
+        if latency_ms is not None:
+            count_key = f"_count_{entity_path}"
+            self._last_log[count_key] = self._last_log.get(count_key, 0) + 1
+            if self._last_log[count_key] % 50 == 0:
+                logger.info(f"[LATENCY] {entity_path} {latency_ms:.0f}ms")
 
         # Rate-limit heavy data types to prevent viewer memory exhaustion.
         # High-bandwidth streams (e.g. 30fps camera, lidar) would otherwise
         # flood the viewer faster than it can evict, causing OOM.  Light
         # messages (Path, PointStamped, TF, etc.) pass through unthrottled.
-        if self.config.min_interval_sec > 0 and isinstance(msg, _HEAVY_MSG_TYPES):
-            now = time.monotonic()
-            last = self._last_log.get(entity_path, 0.0)
-            if now - last < self.config.min_interval_sec:
-                return
-            self._last_log[entity_path] = now
+        # if self.config.min_interval_sec > 0 and isinstance(msg, _HEAVY_MSG_TYPES):
+        #     now = time.monotonic()
+        #     last = self._last_log.get(entity_path, 0.0)
+        #     if now - last < self.config.min_interval_sec:
+        #         return
+        #     self._last_log[entity_path] = now
 
         # apply visual overrides (including final_convert which handles .to_rerun())
         rerun_data: RerunData | None = self._visual_override_for_entity_path(entity_path)(msg)
@@ -298,11 +335,21 @@ class RerunBridgeModule(Module[Config]):
             return
 
         # TFMessage for example returns list of (entity_path, archetype) tuples
+        t0 = time.monotonic()
         if is_rerun_multi(rerun_data):
             for path, archetype in rerun_data:
                 rr.log(path, archetype)
         else:
             rr.log(entity_path, cast("Archetype", rerun_data))
+        log_ms = (time.monotonic() - t0) * 1000
+        cb_total_ms = (time.time() - cb_enter) * 1000
+        if self._debug_csv is not None:
+            self._debug_csv.write(
+                f"{time.time():.3f},{entity_path},"
+                f"{latency_ms if latency_ms is not None else 0:.1f},"
+                f"{entry_latency_ms if entry_latency_ms is not None else 0:.1f},"
+                f"0,{log_ms:.1f},{cb_total_ms:.1f}\n"
+            )
 
     @rpc
     def start(self) -> None:
@@ -311,7 +358,27 @@ class RerunBridgeModule(Module[Config]):
         super().start()
 
         self._last_log: dict[str, float] = {}
-        logger.info("Rerun bridge starting", viewer_mode=self.config.viewer_mode)
+        self._drop_count = 0
+
+        # --- Latency CSV log ---
+        from datetime import datetime
+        from pathlib import Path
+
+        log_dir = Path(__file__).resolve().parents[3] / "data" / "rerun_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_path = log_dir / f"{ts_str}_rerun_latency.csv"
+        self._debug_csv = open(log_path, "w")
+        self._debug_csv.write(
+            f"# min_interval_sec={self.config.min_interval_sec}\n"
+            f"# drop_at_latency_ms={self.config.drop_at_latency_ms}\n"
+            f"# memory_limit={self.config.memory_limit}\n"
+            f"# visual_overrides={list(self.config.visual_override.keys())}\n"
+            f"wall_time,entity,latency_ms,entry_latency_ms,dropped,rr_log_ms,cb_total_ms\n"
+        )
+        logger.info(
+            f"Rerun bridge starting, latency log → {log_path}", viewer_mode=self.config.viewer_mode
+        )
 
         # Initialize and spawn Rerun viewer
         rr.init("dimos")
@@ -437,6 +504,11 @@ class RerunBridgeModule(Module[Config]):
 
     @rpc
     def stop(self) -> None:
+        if self._debug_csv is not None:
+            log_path = self._debug_csv.name
+            self._debug_csv.close()
+            self._debug_csv = None
+            logger.info(f"Latency log saved to {log_path} (total_dropped={self._drop_count})")
         super().stop()
 
 

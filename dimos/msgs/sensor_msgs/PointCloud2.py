@@ -660,11 +660,11 @@ class PointCloud2(Timestamped):
         elif mode == "boxes":
             box_size = size if size is not None else voxel_size
             half = box_size / 2
-            # Snap points to voxel grid centers so boxes tile properly
-            points = np.floor(points / box_size) * box_size + half
-            points, unique_idx = np.unique(points, axis=0, return_index=True)
-            if point_colors is not None and isinstance(point_colors, np.ndarray):
-                point_colors = point_colors[unique_idx]
+            # # Snap points to voxel grid centers so boxes tile properly
+            # points = np.floor(points / box_size) * box_size + half
+            # points, unique_idx = np.unique(points, axis=0, return_index=True)
+            # if point_colors is not None and isinstance(point_colors, np.ndarray):
+            #     point_colors = point_colors[unique_idx]
             return rr.Boxes3D(
                 centers=points,
                 half_sizes=[half, half, half],
