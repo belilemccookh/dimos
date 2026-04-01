@@ -80,6 +80,8 @@ class LocalPlanner(NativeModule):
     Ports:
         registered_scan (In[PointCloud2]): Obstacle point cloud.
         odometry (In[Odometry]): Vehicle state estimation.
+        terrain_map (In[PointCloud2]): Terrain cost map from TerrainAnalysis
+            (intensity = obstacle height). Used when useTerrainAnalysis is enabled.
         joy_cmd (In[Twist]): Joystick/teleop velocity commands.
         way_point (In[PointStamped]): Navigation goal waypoint.
         path (Out[Path]): Selected local path for path follower.
@@ -89,6 +91,7 @@ class LocalPlanner(NativeModule):
 
     registered_scan: In[PointCloud2]
     odometry: In[Odometry]
+    terrain_map: In[PointCloud2]
     joy_cmd: In[Twist]
     way_point: In[PointStamped]
     path: Out[Path]
