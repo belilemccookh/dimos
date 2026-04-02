@@ -28,6 +28,7 @@ from reactivex import operators as ops
 from reactivex.subject import Subject
 
 from dimos.agents.annotation import skill
+from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.module_coordinator import ModuleCoordinator
@@ -224,7 +225,7 @@ class ROSNav(
         """
         pose_to = PoseStamped(
             position=Vector3(x, y, 0),
-            orientation=Quaternion(0.0, 0.0, 0.0, 0.0),
+            orientation=Quaternion(0.0, 0.0, 0.0, 1.0),
             frame_id="base_link",
             ts=time.time(),
         )
@@ -242,7 +243,7 @@ class ROSNav(
             ts=time.time(),
             frame_id="map",
             position=Vector3(x, y, 0.0),
-            orientation=Quaternion(0.0, 0.0, 0.0, 0.0),
+            orientation=Quaternion(0.0, 0.0, 0.0, 1.0),
         )
 
         self.navigate_to(target)
@@ -297,6 +298,9 @@ class ROSNav(
         self.ros_cancel_goal.publish(Bool(data=True))
         self.ros_soft_stop.publish(Int8(data=2))
 
+        # Unblock any waiting navigate_to() call
+        self._goal_reach = False
+
         with self._state_lock:
             self._navigation_state = NavigationState.IDLE
             self._current_goal = None
@@ -316,7 +320,7 @@ class ROSNav(
         if self._navigation_thread and self._navigation_thread.is_alive():
             logger.warning("Previous navigation still running, cancelling")
             self.stop_navigation()
-            self._navigation_thread.join(timeout=1.0)
+            self._navigation_thread.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
 
         self._navigation_thread = threading.Thread(
             target=self._navigate_to_goal_async,

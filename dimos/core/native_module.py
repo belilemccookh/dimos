@@ -54,6 +54,7 @@ from typing import IO, Any
 
 from pydantic import Field
 
+from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.utils.change_detect import PathEntry, did_change
@@ -86,12 +87,26 @@ class NativeModuleConfig(ModuleConfig):
 
     # Override in subclasses to exclude fields from CLI arg generation
     cli_exclude: frozenset[str] = frozenset({"rebuild_on_change"})
+    # Override in subclasses to map field names to custom CLI arg names
+    # (bypasses the automatic snake_case → camelCase conversion).
+    cli_name_override: dict[str, str] = Field(default_factory=dict)
+
+    @staticmethod
+    def _snake_to_camel(name: str) -> str:
+        """Convert snake_case field name to camelCase CLI arg name.
+
+        Examples: ``max_speed`` → ``maxSpeed``, ``max_rel_z`` → ``maxRelZ``.
+        """
+        parts = name.split("_")
+        return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
     def to_cli_args(self) -> list[str]:
-        """Auto-convert subclass config fields to CLI args.
+        """Auto-convert subclass config fields to camelCase CLI args.
 
         Iterates fields defined on the concrete subclass (not NativeModuleConfig
-        or its parents) and converts them to ``["--name", str(value)]`` pairs.
+        or its parents) and converts them to ``["--camelName", str(value)]`` pairs.
+        Field names are converted from snake_case to camelCase (e.g.
+        ``max_speed`` → ``--maxSpeed``).
         Skips fields whose values are ``None`` and fields in ``cli_exclude``.
         """
         ignore_fields = {f for f in NativeModuleConfig.model_fields}
@@ -104,12 +119,13 @@ class NativeModuleConfig(ModuleConfig):
             val = getattr(self, f)
             if val is None:
                 continue
+            cli_name = self.cli_name_override.get(f, self._snake_to_camel(f))
             if isinstance(val, bool):
-                args.extend([f"--{f}", str(val).lower()])
+                args.extend([f"--{cli_name}", str(val).lower()])
             elif isinstance(val, list):
-                args.extend([f"--{f}", ",".join(str(v) for v in val)])
+                args.extend([f"--{cli_name}", ",".join(str(v) for v in val)])
             else:
-                args.extend([f"--{f}", str(val)])
+                args.extend([f"--{cli_name}", str(val)])
         return args
 
 
@@ -227,7 +243,7 @@ class NativeModule(Module[_NativeConfig]):
                 self._process.kill()
                 self._process.wait(timeout=5)
         if self._watchdog is not None and self._watchdog is not threading.current_thread():
-            self._watchdog.join(timeout=2)
+            self._watchdog.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
         self._watchdog = None
         self._process = None
         super().stop()
@@ -240,8 +256,8 @@ class NativeModule(Module[_NativeConfig]):
         stdout_t = self._start_reader(self._process.stdout, "info", self._stdout_tail)
         stderr_t = self._start_reader(self._process.stderr, "warning", self._stderr_tail)
         rc = self._process.wait()
-        stdout_t.join(timeout=2)
-        stderr_t.join(timeout=2)
+        stdout_t.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
+        stderr_t.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
 
         if self._stopping:
             logger.info(

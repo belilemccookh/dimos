@@ -167,27 +167,23 @@ static void publish_lidar(PointCloudXYZI::Ptr cloud, double timestamp,
     pc.data_length = pc.row_step;
     pc.data.resize(pc.data_length);
 
-    // Apply only the ROTATION part of init_pose to point clouds (not translation).
-    // FAST-LIO's get_world_cloud() places points in the SLAM map frame, which
-    // starts at origin.  If the lidar is mounted upside-down, the whole map is
-    // inverted — rotation fixes that.  But the translation component (e.g. z=1.2
-    // for mount height) should NOT be added to points; it only offsets the
-    // odometry origin so downstream modules know the sensor height.  Adding it
-    // to points would shift the ground plane away from z≈0.
-    //
-    // Note: init_pose globals are set once in main() before the processing loop
-    // and never modified, so this check is safe to hoist outside the loop.
-    const bool apply_rotation = has_init_pose();
+    // Apply the full init_pose transform (rotation + translation) to point clouds.
+    // FAST-LIO's map origin is at the sensor's initial position.  The rotation
+    // corrects axis direction (e.g. 180° X for upside-down mount) and the
+    // translation shifts the origin so that ground sits at z≈0 (e.g. z=1.2
+    // for a sensor mounted 1.2m above ground).  This matches the odometry
+    // frame, which also gets the full init_pose applied.
+    const bool apply_init_pose = has_init_pose();
     for (int i = 0; i < num_points; ++i) {
         float* dst = reinterpret_cast<float*>(pc.data.data() + i * 16);
-        if (apply_rotation) {
+        if (apply_init_pose) {
             double rx, ry, rz;
             quat_rotate(g_init_qx, g_init_qy, g_init_qz, g_init_qw,
                         cloud->points[i].x, cloud->points[i].y, cloud->points[i].z,
                         rx, ry, rz);
-            dst[0] = static_cast<float>(rx);
-            dst[1] = static_cast<float>(ry);
-            dst[2] = static_cast<float>(rz);
+            dst[0] = static_cast<float>(rx + g_init_x);
+            dst[1] = static_cast<float>(ry + g_init_y);
+            dst[2] = static_cast<float>(rz + g_init_z);
         } else {
             dst[0] = cloud->points[i].x;
             dst[1] = cloud->points[i].y;
