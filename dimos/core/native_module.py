@@ -198,6 +198,9 @@ class NativeModule(Module[_NativeConfig]):
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            # Start in a new process group so terminal SIGINT doesn't reach the
+            # child directly.  The coordinator will send SIGTERM via stop().
+            start_new_session=True,
         )
         logger.info(
             "Native process started",

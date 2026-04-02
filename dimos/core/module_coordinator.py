@@ -72,8 +72,8 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
             logger.info("Stopping module...", module=module_class.__name__)
             try:
                 module.stop()
-            except Exception:
-                logger.error("Error stopping module", module=module_class.__name__, exc_info=True)
+            except Exception as e:
+                logger.error("Error stopping module", module=module_class.__name__, error=repr(e))
             logger.info("Module stopped.", module=module_class.__name__)
 
         def _stop_manager(m: DeploymentManager) -> None:
