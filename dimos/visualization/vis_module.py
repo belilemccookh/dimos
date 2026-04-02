@@ -65,11 +65,11 @@ def vis_module(
                 WebsocketVisModule.blueprint(),
             )
         case "rerun":
+            from dimos.core.global_config import global_config
             from dimos.protocol.pubsub.impl.lcmpubsub import LCM
             from dimos.visualization.rerun.bridge import RerunBridgeModule
-            from dimos.core.global_config import global_config
 
-            rerun_config = {**rerun_config} # copy (avoid mutation)
+            rerun_config = {**rerun_config}  # copy (avoid mutation)
             rerun_config.setdefault("pubsubs", [LCM()])
             rerun_config.setdefault("rerun_open", global_config.rerun_open)
             rerun_config.setdefault("rerun_web", global_config.rerun_web)

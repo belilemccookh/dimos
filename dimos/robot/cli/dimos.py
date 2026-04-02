@@ -554,9 +554,7 @@ def rerun_bridge_cmd(
     memory_limit: str = typer.Option(
         "25%", help="Memory limit for Rerun viewer (e.g., '4GB', '16GB', '25%')"
     ),
-    rerun_open: str = typer.Option(
-        "native", help="How to open Rerun: native, web, both, none"
-    ),
+    rerun_open: str = typer.Option("native", help="How to open Rerun: native, web, both, none"),
     rerun_web: bool = typer.Option(
         True, "--rerun-web/--no-rerun-web", help="Enable/Disable Rerun web server"
     ),

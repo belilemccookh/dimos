@@ -27,14 +27,15 @@ from typing import (
     TypeAlias,
     TypeGuard,
     cast,
-    runtime_checkable,
     get_args,
+    runtime_checkable,
 )
 
 from reactivex.disposable import Disposable
 from rerun._baseclasses import Archetype
 from rerun.blueprint import Blueprint
 from toolz import pipe  # type: ignore[import-untyped]
+
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.msgs.sensor_msgs.Image import Image
@@ -43,7 +44,12 @@ from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.protocol.pubsub.patterns import Glob, pattern_matches
 from dimos.protocol.pubsub.spec import SubscribeAllCapable
 from dimos.utils.logging_config import setup_logger
-from dimos.visualization.constants import RerunOpenOption, RERUN_GRPC_PORT, RERUN_OPEN_DEFAULT, RERUN_ENABLE_WEB
+from dimos.visualization.constants import (
+    RERUN_ENABLE_WEB,
+    RERUN_GRPC_PORT,
+    RERUN_OPEN_DEFAULT,
+    RerunOpenOption,
+)
 
 # Message types with large payloads that need rate-limiting.
 # Image (~1 MB/frame at 30 fps) and PointCloud2 (~600-800 KB/frame)
@@ -289,9 +295,10 @@ class RerunBridgeModule(Module[Config]):
 
     @rpc
     def start(self) -> None:
-        import rerun as rr
-        from urllib.parse import urlparse
         import socket
+        from urllib.parse import urlparse
+
+        import rerun as rr
 
         super().start()
 
@@ -300,7 +307,7 @@ class RerunBridgeModule(Module[Config]):
 
         # Initialize
         rr.init("dimos")
-        
+
         # start grpc if needed
         # If the port is already in use (another instance running), connect
 
@@ -312,9 +319,7 @@ class RerunBridgeModule(Module[Config]):
             port_in_use = sock.connect_ex(("127.0.0.1", grpc_port)) == 0
 
         if port_in_use:
-            logger.info(
-                f"gRPC port {grpc_port} already in use, connecting to existing server"
-            )
+            logger.info(f"gRPC port {grpc_port} already in use, connecting to existing server")
             rr.connect_grpc(url=self.config.connect_url)
             server_uri = self.config.connect_url
         else:
@@ -323,14 +328,14 @@ class RerunBridgeModule(Module[Config]):
                 server_memory_limit=self.config.memory_limit,
             )
             logger.info(f"Rerun gRPC server ready at {server_uri}")
-        
+
         # Check open arg
         if self.config.rerun_open not in get_args(RerunOpenOption):
             logger.warning(
                 f"rerun_open was {self.config.rerun_open} which is not one of {get_args(RerunOpenOption)}",
                 exc_info=True,
             )
-        
+
         # launch native viewer if desired
         spawned = False
         if self.config.rerun_open == "native" or self.config.rerun_open == "both":
@@ -350,7 +355,7 @@ class RerunBridgeModule(Module[Config]):
                     "dimos-viewer found but failed to spawn, falling back to stock rerun",
                     exc_info=True,
                 )
-            
+
             # fallback on normal (non-dimos-viewer) rerun
             if not spawned:
                 try:
@@ -366,7 +371,7 @@ class RerunBridgeModule(Module[Config]):
         open_web = self.config.rerun_open == "web" or self.config.rerun_open == "both"
         if open_web or self.config.rerun_web:
             rr.serve_web_viewer(connect_to=server_uri, open_browser=open_web)
-        
+
         # setup blueprint
         if self.config.blueprint:
             rr.send_blueprint(_with_graph_tab(self.config.blueprint()))
@@ -467,5 +472,3 @@ class RerunBridgeModule(Module[Config]):
     def stop(self) -> None:
         self._visual_override_for_entity_path.cache_clear()
         super().stop()
-
-
