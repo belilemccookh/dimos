@@ -14,10 +14,10 @@
 
 """Simulation + PGO blueprint: base autonomy with pose graph optimization.
 
-Replaces GlobalMap with PGO module. PGO provides loop-closure-corrected
-odometry and accumulated global map from optimized keyframes.
+PGO provides loop-closure-corrected odometry and accumulated global map from optimized keyframes.
+However the global map ouput is a slow update compared to odom.
 
-Data flow:
+Example Data flow:
     UnityBridge → registered_scan + odometry
     → PGO → corrected_odometry + global_map
     → SensorScanGeneration → TerrainAnalysis → LocalPlanner → PathFollower

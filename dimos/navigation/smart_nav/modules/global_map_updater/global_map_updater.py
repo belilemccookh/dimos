@@ -12,14 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GlobalMap: accumulated voxelized point cloud from registered_scan.
+"""GlobalMapUpdater — accumulated voxelized point cloud from registered_scan.
 
 Subscribes to registered_scan and odometry, accumulates points into a
-voxel grid, and publishes the full accumulated cloud periodically for
-Rerun visualization. This gives a persistent "map" view instead of
-only seeing instant/local data.
+voxel grid with TIME DECAY and RANGE CULLING, and publishes the bounded
+accumulated cloud periodically for visualization or incremental mapping.
 
-Decay and range limits prevent unbounded memory growth.
+This is the bounded-memory alternative to PreloadedMapTracker. Points
+are expired after `decay_time` seconds and culled if they're more than
+`max_range` meters from the robot. A hard cap (`max_points`) prevents
+runaway growth.
+
+Suitable for long-running systems where the full explored history is
+not needed. For planners that need the full persistent history (e.g.
+PCT tomograms), use PreloadedMapTracker instead.
 """
 
 from __future__ import annotations
@@ -36,8 +42,8 @@ from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 
 
-class GlobalMapConfig(ModuleConfig):
-    """Config for global map accumulator."""
+class GlobalMapUpdaterConfig(ModuleConfig):
+    """Config for global map updater (bounded voxel accumulator)."""
 
     voxel_size: float = 0.15  # meters per voxel (fine enough for map detail)
     decay_time: float = 300.0  # seconds before points expire (5 min)
@@ -48,12 +54,12 @@ class GlobalMapConfig(ModuleConfig):
     height_max: float = 4.0  # clip ceiling
 
 
-class GlobalMap(Module[GlobalMapConfig]):
-    """Accumulated global point cloud from registered_scan.
+class GlobalMapUpdater(Module[GlobalMapUpdaterConfig]):
+    """Bounded-memory accumulated global point cloud from registered_scan.
 
     Voxelizes incoming scans and maintains a persistent map with
-    time-based decay and range culling. Publishes the full accumulated
-    cloud for Rerun visualization.
+    time-based decay and range culling. Publishes the bounded accumulated
+    cloud for visualization or incremental mapping.
 
     Ports:
         registered_scan (In[PointCloud2]): World-frame lidar scan.
@@ -61,7 +67,7 @@ class GlobalMap(Module[GlobalMapConfig]):
         global_map (Out[PointCloud2]): Accumulated voxelized cloud.
     """
 
-    default_config = GlobalMapConfig
+    default_config = GlobalMapUpdaterConfig
 
     registered_scan: In[PointCloud2]
     odometry: In[Odometry]

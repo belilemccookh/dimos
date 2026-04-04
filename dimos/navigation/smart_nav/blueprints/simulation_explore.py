@@ -38,7 +38,6 @@ from dimos.navigation.smart_nav.blueprints._rerun_helpers import (
     waypoint_override,
 )
 from dimos.navigation.smart_nav.modules.click_to_goal.click_to_goal import ClickToGoal
-from dimos.navigation.smart_nav.modules.global_map.global_map import GlobalMap
 from dimos.navigation.smart_nav.modules.local_planner.local_planner import LocalPlanner
 from dimos.navigation.smart_nav.modules.path_follower.path_follower import PathFollower
 from dimos.navigation.smart_nav.modules.sensor_scan_generation.sensor_scan_generation import (
@@ -113,7 +112,6 @@ def make_explore_blueprint(scene: str = "home_building_1"):
         ),
         TarePlanner.blueprint(),
         ClickToGoal.blueprint(),
-        GlobalMap.blueprint(),
         vis_module(viewer_backend=global_config.viewer, rerun_config=rerun_config),
     ).remappings(
         [

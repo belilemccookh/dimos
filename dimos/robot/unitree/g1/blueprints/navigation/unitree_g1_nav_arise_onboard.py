@@ -36,7 +36,6 @@ import os
 from dimos.core.blueprints import autoconnect
 from dimos.hardware.sensors.lidar.livox.module import Mid360
 from dimos.navigation.smart_nav.modules.arise_slam.arise_slam import AriseSLAM
-from dimos.navigation.smart_nav.modules.global_map.global_map import GlobalMap
 from dimos.navigation.smart_nav.modules.sensor_scan_generation.sensor_scan_generation import (
     SensorScanGeneration,
 )
@@ -59,7 +58,6 @@ unitree_g1_nav_arise_onboard = (
         ),
         SensorScanGeneration.blueprint(),
         _smart_nav,
-        GlobalMap.blueprint(),
         G1HighLevelDdsSdk.blueprint(),
         RerunBridgeModule.blueprint(**_rerun_config),
     )

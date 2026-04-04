@@ -62,6 +62,30 @@ def terrain_map_override(cloud: Any) -> Any:
     return rr.Points3D(positions=points[:, :3], colors=colors, radii=0.08)
 
 
+def explored_areas_override(cloud: Any) -> Any:
+    """Render PreloadedMapTracker's explored_areas — cumulative seen points."""
+    return cloud.to_rerun(colormap="magma", size=0.05)
+
+
+def preloaded_map_override(cloud: Any) -> Any:
+    """Render PreloadedMapTracker's static pre-loaded reference map."""
+    return cloud.to_rerun(colormap="greys", size=0.04)
+
+
+def trajectory_override(cloud: Any) -> Any:
+    """Render robot trajectory breadcrumb as a connected line strip."""
+    import rerun as rr
+
+    points, _ = cloud.as_numpy()
+    if len(points) < 2:
+        return None
+    pts = [[float(p[0]), float(p[1]), float(p[2]) + 0.05] for p in points]
+    return [
+        ("world/trajectory/line", rr.LineStrips3D([pts], colors=[(0, 200, 255)], radii=0.03)),
+        ("world/trajectory/nodes", rr.Points3D(pts, colors=[(0, 150, 255)], radii=0.05)),
+    ]
+
+
 def terrain_map_ext_override(cloud: Any) -> Any:
     """Render extended terrain map — persistent accumulated cloud."""
     return cloud.to_rerun(colormap="viridis", size=0.06)

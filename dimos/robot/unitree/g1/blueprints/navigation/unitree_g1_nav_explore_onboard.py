@@ -32,7 +32,6 @@ import os
 from dimos.core.blueprints import autoconnect
 from dimos.hardware.sensors.lidar.fastlio2.module import FastLio2
 from dimos.navigation.smart_nav.modules.click_to_goal.click_to_goal import ClickToGoal
-from dimos.navigation.smart_nav.modules.global_map.global_map import GlobalMap
 from dimos.navigation.smart_nav.modules.sensor_scan_generation.sensor_scan_generation import (
     SensorScanGeneration,
 )
@@ -48,12 +47,11 @@ unitree_g1_nav_explore_onboard = (
             host_ip=os.getenv("LIDAR_HOST_IP", "192.168.123.164"),
             lidar_ip=os.getenv("LIDAR_IP", "192.168.123.120"),
             mount=G1.internal_odom_offsets["mid360_link"],
-            map_freq=0.0,  # GlobalMap handles accumulation
+            map_freq=0.0,
         ),
         SensorScanGeneration.blueprint(),
         _smart_nav,
         TarePlanner.blueprint(),
-        GlobalMap.blueprint(),
         G1HighLevelDdsSdk.blueprint(),
         RerunBridgeModule.blueprint(**_rerun_config),
     )
