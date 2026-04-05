@@ -31,7 +31,6 @@ from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.Twist import Twist
-from dimos.msgs.geometry_msgs.TwistDuration import TwistDuration
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -42,23 +41,15 @@ class CmdVelMuxConfig(ModuleConfig):
 
 
 class CmdVelMux(Module[CmdVelMuxConfig]):
-    """Multiplexes nav_cmd_vel, tele_cmd_vel, and agent_cmd_vel into a single cmd_vel output.
-
-    Priority (highest → lowest): agent_cmd_vel > tele_cmd_vel > nav_cmd_vel.
+    """Multiplexes nav_cmd_vel and tele_cmd_vel into a single cmd_vel output.
 
     When teleop input arrives, stop_movement is published so downstream
     modules (planner, explorer) can cancel their active goals.
 
-    agent_cmd_vel accepts TwistDuration: the velocity is applied for the
-    specified duration and then a zero Twist is automatically published.
-    Agent commands do NOT publish stop_movement (the agent is controlling
-    movement intentionally, not interrupting nav).
-
     Ports:
         nav_cmd_vel (In[Twist]): Velocity from the autonomous planner.
         tele_cmd_vel (In[Twist]): Velocity from keyboard/joystick teleop.
-        agent_cmd_vel (In[TwistDuration]): Velocity from agent/tool with duration.
-        cmd_vel (Out[Twist]): Merged output.
+        cmd_vel (Out[Twist]): Merged output — teleop wins when active.
         stop_movement (Out[Bool]): Published when teleop begins.
     """
 
@@ -66,36 +57,30 @@ class CmdVelMux(Module[CmdVelMuxConfig]):
 
     nav_cmd_vel: In[Twist]
     tele_cmd_vel: In[Twist]
-    agent_cmd_vel: In[TwistDuration]
     cmd_vel: Out[Twist]
     stop_movement: Out[Bool]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._teleop_active = False
-        self._agent_active = False
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
-        self._agent_timer: threading.Timer | None = None
 
     def __getstate__(self) -> dict[str, Any]:
         state = super().__getstate__()
         state.pop("_lock", None)
         state.pop("_timer", None)
-        state.pop("_agent_timer", None)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         super().__setstate__(state)
         self._lock = threading.Lock()
         self._timer = None
-        self._agent_timer = None
 
     @rpc
     def start(self) -> None:
         self.nav_cmd_vel._transport.subscribe(self._on_nav)
         self.tele_cmd_vel._transport.subscribe(self._on_teleop)
-        self.agent_cmd_vel._transport.subscribe(self._on_agent)
 
     @rpc
     def stop(self) -> None:
@@ -103,31 +88,19 @@ class CmdVelMux(Module[CmdVelMuxConfig]):
             if self._timer is not None:
                 self._timer.cancel()
                 self._timer = None
-            if self._agent_timer is not None:
-                self._agent_timer.cancel()
-                self._agent_timer = None
         super().stop()
 
     def _on_nav(self, msg: Twist) -> None:
         with self._lock:
-            if self._agent_active or self._teleop_active:
+            if self._teleop_active:
                 return
         self.cmd_vel._transport.publish(msg)
 
     def _on_teleop(self, msg: Twist) -> None:
-        with self._lock:
-            # Agent has highest priority — ignore teleop while agent is active
-            if self._agent_active:
-                return
-            teleop_currently_active = self._teleop_active
-
+        # Ignore zero-velocity messages — they indicate key release, not
+        # active teleop.  Only non-zero commands should suppress nav and
+        # publish stop_movement.
         if msg.is_zero():
-            # Key release: forward the zero twist so the robot stops
-            # immediately, but only while teleop is active (otherwise
-            # nav would be silenced by a stale stop). Do NOT reset the
-            # cooldown timer — nav stays suppressed for the cooldown.
-            if teleop_currently_active:
-                self.cmd_vel._transport.publish(msg)
             return
 
         was_active: bool
@@ -148,44 +121,6 @@ class CmdVelMux(Module[CmdVelMuxConfig]):
             logger.info("Teleop active — published stop_movement")
 
         self.cmd_vel._transport.publish(msg)
-
-    def _on_agent(self, msg: TwistDuration) -> None:
-        """Handle agent velocity command with duration.
-
-        Highest priority — suppresses both teleop and nav.  After *duration*
-        seconds the mux automatically publishes a zero Twist and releases
-        priority.  Does NOT publish stop_movement.
-        """
-        twist = msg.to_twist()
-        duration = msg.duration
-
-        with self._lock:
-            self._agent_active = True
-            # Cancel any previous agent timer
-            if self._agent_timer is not None:
-                self._agent_timer.cancel()
-                self._agent_timer = None
-
-            if duration > 0:
-                self._agent_timer = threading.Timer(duration, self._end_agent)
-                self._agent_timer.daemon = True
-                self._agent_timer.start()
-
-        logger.info(
-            "Agent cmd_vel: linear=%s angular=%s duration=%.2fs",
-            twist.linear,
-            twist.angular,
-            duration,
-        )
-        self.cmd_vel._transport.publish(twist)
-
-    def _end_agent(self) -> None:
-        """Called when agent duration expires — publish zero twist and release."""
-        with self._lock:
-            self._agent_active = False
-            self._agent_timer = None
-        self.cmd_vel._transport.publish(Twist.zero())
-        logger.info("Agent cmd_vel duration expired — published zero twist")
 
     def _end_teleop(self) -> None:
         with self._lock:
