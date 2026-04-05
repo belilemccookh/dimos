@@ -79,6 +79,7 @@ all_blueprints = {
     "unitree-g1-nav-basic-sim": "dimos.robot.unitree.g1.blueprints.navigation.unitree_g1_nav_basic_sim:unitree_g1_nav_basic_sim",
     "unitree-g1-nav-onboard": "dimos.robot.unitree.g1.blueprints.navigation.unitree_g1_nav_onboard:unitree_g1_nav_onboard",
     "unitree-g1-nav-sim": "dimos.robot.unitree.g1.blueprints.navigation.unitree_g1_nav_sim:unitree_g1_nav_sim",
+    "unitree-g1-nav-sim-simple": "dimos.robot.unitree.g1.blueprints.navigation.unitree_g1_nav_sim_simple:unitree_g1_nav_sim_simple",
     "unitree-g1-shm": "dimos.robot.unitree.g1.blueprints.perceptive.unitree_g1_shm:unitree_g1_shm",
     "unitree-g1-sim": "dimos.robot.unitree.g1.blueprints.perceptive.unitree_g1_sim:unitree_g1_sim",
     "unitree-go2": "dimos.robot.unitree.go2.blueprints.smart.unitree_go2:unitree_go2",
@@ -105,7 +106,7 @@ all_blueprints = {
 
 
 all_modules = {
-    "arise-sim-adapter": "dimos.navigation.smart_nav.modules.arise_sim_adapter.AriseSimAdapter",
+    "arise-sim-adapter": "dimos.navigation.smart_nav.arise_sim_adapter.AriseSimAdapter",
     "arise-slam": "dimos.navigation.smart_nav.modules.arise_slam.arise_slam.AriseSLAM",
     "arm-teleop-module": "dimos.teleop.quest.quest_extensions.ArmTeleopModule",
     "b-box-navigation-module": "dimos.navigation.bbox_navigation.BBoxNavigationModule",
@@ -180,6 +181,7 @@ all_modules = {
     "security-module": "dimos.experimental.security_demo.security_module.SecurityModule",
     "sensor-scan-generation": "dimos.navigation.smart_nav.modules.sensor_scan_generation.sensor_scan_generation.SensorScanGeneration",
     "simple-phone-teleop": "dimos.teleop.phone.phone_extensions.SimplePhoneTeleop",
+    "simple-planner": "dimos.navigation.smart_nav.modules.simple_planner.simple_planner.SimplePlanner",
     "spatial-memory": "dimos.perception.spatial_perception.SpatialMemory",
     "speak-skill": "dimos.agents.skills.speak_skill.SpeakSkill",
     "tare-planner": "dimos.navigation.smart_nav.modules.tare_planner.tare_planner.TarePlanner",

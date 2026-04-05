@@ -20,6 +20,7 @@ evaluation to select collision-free paths toward goals.
 
 from __future__ import annotations
 
+from pathlib import Path as _FsPath
 from typing import Any
 
 from dimos.core.native_module import NativeModule, NativeModuleConfig
@@ -43,11 +44,16 @@ class LocalPlannerConfig(NativeModuleConfig):
     Fields with ``None`` default are omitted from the CLI.
     """
 
-    cwd: str | None = "."
+    cwd: str | None = str(_FsPath(__file__).resolve().parent)
     executable: str = "result/bin/local_planner"
-    build_command: str | None = (
-        "nix build github:dimensionalOS/dimos-module-local-planner/v0.1.1 --no-write-lock-file"
-    )
+    build_command: str | None = "nix build ./repo --no-write-lock-file"
+    rebuild_on_change: list[str] | None = [  # type: ignore[assignment]
+        "repo/main.cpp",
+    ]
+    # TODO: remove below after finish testing
+    # build_command: str | None = (
+    #     "nix build github:dimensionalOS/dimos-module-local-planner/v0.1.1 --no-write-lock-file"
+    # )
 
     # C++ binary uses camelCase CLI args (except paths_dir).
     cli_name_override: dict[str, str] = {
@@ -136,6 +142,10 @@ class LocalPlanner(NativeModule):
         joy_cmd (In[Twist]): Joystick/teleop velocity commands.
         way_point (In[PointStamped]): Navigation goal waypoint.
         path (Out[Path]): Selected local path for path follower.
+        obstacle_cloud (Out[PointCloud2]): Vehicle-frame crop of the planner's
+            obstacle cloud (intensity = height above ground). Published at
+            ~5 Hz for debugging/visualization of what the planner is actually
+            treating as obstacles.
     """
 
     default_config: type[LocalPlannerConfig] = LocalPlannerConfig  # type: ignore[assignment]
@@ -146,3 +156,4 @@ class LocalPlanner(NativeModule):
     joy_cmd: In[Twist]
     way_point: In[PointStamped]
     path: Out[Path]
+    obstacle_cloud: Out[PointCloud2]

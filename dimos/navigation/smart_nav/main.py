@@ -42,6 +42,7 @@ from dimos.navigation.smart_nav.modules.global_map_updater.global_map_updater im
 from dimos.navigation.smart_nav.modules.local_planner.local_planner import LocalPlanner
 from dimos.navigation.smart_nav.modules.path_follower.path_follower import PathFollower
 from dimos.navigation.smart_nav.modules.pgo.pgo import PGO
+from dimos.navigation.smart_nav.modules.simple_planner.simple_planner import SimplePlanner
 from dimos.navigation.smart_nav.modules.tare_planner.tare_planner import TarePlanner
 from dimos.navigation.smart_nav.modules.terrain_analysis.terrain_analysis import TerrainAnalysis
 from dimos.navigation.smart_nav.modules.terrain_map_ext.terrain_map_ext import TerrainMapExt
@@ -53,12 +54,14 @@ def smart_nav(
     use_tare: bool = False,
     use_global_map_updater: bool = False,
     use_terrain_map_ext: bool = True,
+    use_simple_planner: bool = False,
     vehicle_height: float | None = None,
     terrain_analysis: dict[str, Any] | None = None,
     terrain_map_ext: dict[str, Any] | None = None,
     local_planner: dict[str, Any] | None = None,
     path_follower: dict[str, Any] | None = None,
     far_planner: dict[str, Any] | None = None,
+    simple_planner: dict[str, Any] | None = None,
     pgo: dict[str, Any] | None = None,
     click_to_goal: dict[str, Any] | None = None,
     cmd_vel_mux: dict[str, Any] | None = None,
@@ -169,7 +172,11 @@ def smart_nav(
                 **(path_follower or {}),
             }
         ),
-        FarPlanner.blueprint(**{"sensor_range": 15.0, **(far_planner or {})}),
+        *(
+            [SimplePlanner.blueprint(**(simple_planner or {}))]
+            if use_simple_planner
+            else [FarPlanner.blueprint(**{"sensor_range": 15.0, **(far_planner or {})})]
+        ),
         PGO.blueprint(**(pgo or {})),
         ClickToGoal.blueprint(**(click_to_goal or {})),
         CmdVelMux.blueprint(**(cmd_vel_mux or {})),
@@ -197,18 +204,22 @@ def smart_nav(
         # Global-scale planners use PGO-corrected odometry (per CMU ICRA 2022):
         # loop-closure adjustments go to high-level planners; local modules
         # care only about the local environment and work in the odom frame.
-        (FarPlanner, "odometry", "corrected_odometry"),
+        (
+            SimplePlanner if use_simple_planner else FarPlanner,
+            "odometry",
+            "corrected_odometry",
+        ),
         (ClickToGoal, "odometry", "corrected_odometry"),
         (TerrainAnalysis, "odometry", "corrected_odometry"),
+        # FAR (or TARE) owns way_point — disconnect ClickToGoal's output.
+        (ClickToGoal, "way_point", "_click_way_point_unused"),
     ]
-    if use_tare:
-        # TARE drives way_point; disconnect ClickToGoal's output to avoid conflict.
-        remappings.append((ClickToGoal, "way_point", "_click_way_point_unused"))
 
     return autoconnect(*modules).remappings(remappings)
 
 
 # ─── Rerun visual overrides (robot-agnostic) ─────────────────────────────────
+
 
 def smart_nav_rerun_config(
     user_config: dict[str, Any] | None = None,
@@ -236,6 +247,7 @@ def smart_nav_rerun_config(
     visual_override.setdefault("world/path", _path_override)
     visual_override.setdefault("world/way_point", _waypoint_override)
     visual_override.setdefault("world/goal_path", _goal_path_override)
+    visual_override.setdefault("world/obstacle_cloud", _obstacle_cloud_override)
     resolved["visual_override"] = visual_override
     static_entries = dict(resolved["static"])
     static_entries.setdefault("world/floor", _static_floor)
@@ -292,6 +304,22 @@ def _terrain_map_override(cloud: Any) -> Any:
     colors[:, 2] = 30
 
     return rr.Points3D(positions=points[:, :3], colors=colors, radii=0.08)
+
+
+def _obstacle_cloud_override(cloud: Any) -> Any:
+    """Render LocalPlanner's obstacle_cloud — the vehicle-frame crop the C++
+    planner actually tests candidate paths against. Colored by intensity
+    (= height above ground) with a `plasma` colormap so it's visually
+    distinct from terrain_map. Attached to the sensor TF frame since the
+    points are already in vehicle frame.
+    """
+    import rerun as rr
+
+    arch = cloud.to_rerun(colormap="plasma", size=0.06)
+    return [
+        ("world/obstacle_cloud", rr.Transform3D(parent_frame="tf#/sensor")),
+        ("world/obstacle_cloud", arch),
+    ]
 
 
 def _explored_areas_override(cloud: Any) -> Any:
