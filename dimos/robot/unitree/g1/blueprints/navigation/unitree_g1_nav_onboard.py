@@ -64,13 +64,37 @@ unitree_g1_nav_onboard = (
             map_freq=1.0,
         ),
         smart_nav(
+            use_simple_planner=True,
             vehicle_height=G1.height_clearance,
-            far_planner={"sensor_range": 30.0, "visibility_range": 25.0},
-            # G1 is a biped — disable sideways (linear.y) strafe near the waypoint.
-            # With the smart_nav default of 0.5m, PathFollower emits lateral
-            # velocity once inside that radius, which the G1 can't execute well
-            # and manifests as jitter as waypoints advance along the FAR route.
-            path_follower={"omni_dir_goal_threshold": 0.0},
+            # path_follower={"omni_dir_goal_threshold": 0.0},
+            terrain_analysis={
+                "obstacle_height_threshold": 0.1,
+                "ground_height_threshold": 0.05,
+                "max_relative_z": 0.3,
+                "min_relative_z": -1.5,
+            },
+            local_planner={
+                "max_speed": 2.0,
+                "autonomy_speed": 2.0,
+                "obstacle_height_threshold": 0.1,
+                "max_relative_z": 0.3,
+                "min_relative_z": -1.5,
+                "freeze_ang": 180.0,
+                "two_way_drive": False,
+            },
+            path_follower={
+                "max_speed": 2.0,
+                "autonomy_speed": 2.0,
+                "max_acceleration": 4.0,
+                "slow_down_distance_threshold": 0.5,
+                "omni_dir_goal_threshold": 0.5,
+                "two_way_drive": False,
+            },
+            far_planner={
+                "sensor_range": 15.0,
+                "is_static_env": False,
+                "converge_dist": 1.5,
+            },
         ),
         G1HighLevelDdsSdk.blueprint(),
         RerunBridgeModule.blueprint(
