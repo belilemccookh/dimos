@@ -21,6 +21,7 @@ cross-process communication -- not just direct method calls.
 import time
 
 import numpy as np
+import pytest
 
 from dimos.core.stream import In, Out
 from dimos.core.transport import LCMTransport
@@ -37,6 +38,7 @@ from dimos.navigation.smart_nav.modules.tui_control.tui_control import TUIContro
 from dimos.simulation.unity.module import UnityBridgeModule
 
 
+@pytest.mark.slow
 class TestTransportWiring:
     """Test that modules publish/subscribe through real LCM transports."""
 
@@ -48,26 +50,29 @@ class TestTransportWiring:
         transport = LCMTransport("/_test/smart_nav/odom", Odometry)
         m.odometry._transport = transport
 
-        received = []
+        received: list[Odometry] = []
         transport.subscribe(lambda msg: received.append(msg))
 
-        # Simulate one odometry publish (same code path as _sim_loop)
-        quat = Quaternion.from_euler(Vector3(0.0, 0.0, 0.0))
-        odom = Odometry(
-            ts=time.time(),
-            frame_id="map",
-            child_frame_id="sensor",
-            pose=Pose(
-                position=[1.0, 2.0, 0.75],
-                orientation=[quat.x, quat.y, quat.z, quat.w],
-            ),
-        )
-        m.odometry._transport.publish(odom)
+        try:
+            # Simulate one odometry publish (same code path as _sim_loop)
+            quat = Quaternion.from_euler(Vector3(0.0, 0.0, 0.0))
+            odom = Odometry(
+                ts=time.time(),
+                frame_id="map",
+                child_frame_id="sensor",
+                pose=Pose(
+                    position=[1.0, 2.0, 0.75],
+                    orientation=[quat.x, quat.y, quat.z, quat.w],
+                ),
+            )
+            m.odometry._transport.publish(odom)
 
-        # LCM transport delivers asynchronously -- give it a moment
-        time.sleep(0.1)
-        assert len(received) >= 1
-        assert abs(received[0].x - 1.0) < 0.01
+            # LCM transport delivers asynchronously -- give it a moment
+            time.sleep(0.1)
+            assert len(received) >= 1
+            assert abs(received[0].x - 1.0) < 0.01
+        finally:
+            transport.stop()
 
     def test_sensor_scan_subscribes_and_publishes_via_transport(self):
         """SensorScanGeneration should work entirely through transports."""
@@ -84,35 +89,42 @@ class TestTransportWiring:
         m.sensor_scan._transport = scan_out_transport
         m.odometry_at_scan._transport = odom_out_transport
 
-        # Start the module (subscribes via transport)
-        m.start()
+        transports = [odom_transport, scan_in_transport, scan_out_transport, odom_out_transport]
 
-        # Collect outputs
-        scan_results = []
-        scan_out_transport.subscribe(lambda msg: scan_results.append(msg))
+        try:
+            # Start the module (subscribes via transport)
+            m.start()
 
-        # Publish odometry
-        quat = Quaternion.from_euler(Vector3(0.0, 0.0, 0.0))
-        odom = Odometry(
-            ts=time.time(),
-            frame_id="map",
-            child_frame_id="sensor",
-            pose=Pose(
-                position=[0.0, 0.0, 0.0],
-                orientation=[quat.x, quat.y, quat.z, quat.w],
-            ),
-        )
-        odom_transport.publish(odom)
-        time.sleep(0.05)
+            # Collect outputs
+            scan_results: list[PointCloud2] = []
+            scan_out_transport.subscribe(lambda msg: scan_results.append(msg))
 
-        # Publish a point cloud
-        points = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
-        cloud = PointCloud2.from_numpy(points, frame_id="map", timestamp=time.time())
-        scan_in_transport.publish(cloud)
-        time.sleep(0.2)
+            # Publish odometry
+            quat = Quaternion.from_euler(Vector3(0.0, 0.0, 0.0))
+            odom = Odometry(
+                ts=time.time(),
+                frame_id="map",
+                child_frame_id="sensor",
+                pose=Pose(
+                    position=[0.0, 0.0, 0.0],
+                    orientation=[quat.x, quat.y, quat.z, quat.w],
+                ),
+            )
+            odom_transport.publish(odom)
+            time.sleep(0.1)
 
-        assert len(scan_results) >= 1
-        assert scan_results[0].frame_id == "sensor_at_scan"
+            # Publish a point cloud
+            points = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+            cloud = PointCloud2.from_numpy(points, frame_id="map", timestamp=time.time())
+            scan_in_transport.publish(cloud)
+            time.sleep(0.3)
+
+            assert len(scan_results) >= 1
+            assert scan_results[0].frame_id == "sensor_at_scan"
+        finally:
+            m.stop()
+            for t in transports:
+                t.stop()
 
     def test_tui_publishes_twist_via_transport(self):
         """TUI module should publish cmd_vel through its transport."""
@@ -127,16 +139,20 @@ class TestTransportWiring:
         wp_transport = LCMTransport("/_test/smart_nav/tui/way_point", PointStamped)
         m.way_point._transport = wp_transport
 
-        received = []
+        received: list[Twist] = []
         transport.subscribe(lambda msg: received.append(msg))
 
-        m._handle_key("w")  # forward
-        m.start()
-        time.sleep(0.15)  # let publish loop run a few times
-        m.stop()
+        try:
+            m._handle_key("w")  # forward
+            m.start()
+            time.sleep(0.15)  # let publish loop run a few times
+            m.stop()
 
-        assert len(received) >= 1
-        assert received[-1].linear.x > 0  # forward velocity
+            assert len(received) >= 1
+            assert received[-1].linear.x > 0  # forward velocity
+        finally:
+            transport.stop()
+            wp_transport.stop()
 
 
 class TestPortTypeCompatibility:

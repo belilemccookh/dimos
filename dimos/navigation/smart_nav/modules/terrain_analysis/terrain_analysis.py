@@ -36,7 +36,7 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     cwd: str | None = "."
     executable: str = "result/bin/terrain_analysis"
     build_command: str | None = (
-        "nix build github:dimensionalOS/dimos-module-terrain-analysis/v0.1.0 --no-write-lock-file"
+        "nix build github:dimensionalOS/dimos-module-terrain-analysis/v0.1.1 --no-write-lock-file"
     )
     # C++ binary uses camelCase CLI args (with VFOV all-caps).
     cli_name_override: dict[str, str] = {
@@ -72,8 +72,6 @@ class TerrainAnalysisConfig(NativeModuleConfig):
         "distance_ratio_z": "disRatioZ",
     }
 
-    # --- Sensor / input filtering ---
-
     # Maximum range of lidar sensor used for terrain analysis (m).
     sensor_range: float = 20.0
     # Voxel size for downsampling the input registered scan (m).
@@ -82,8 +80,6 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     terrain_voxel_size: float = 1.0
     # Terrain grid radius in cells (full grid is 2*N+1 on a side).
     terrain_voxel_half_width: int = 10
-
-    # --- Obstacle / ground classification ---
 
     # Points higher than this above ground are classified as obstacles (m).
     obstacle_height_threshold: float = 0.15
@@ -96,14 +92,10 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     # Height-band filter: maximum z relative to robot (m).
     max_relative_z: float | None = None
 
-    # --- Sorting / quantile ground estimation ---
-
     # Use quantile-based sorting for ground height estimation.
     use_sorting: bool | None = None
     # Quantile of z-values used to estimate ground height (0–1).
     quantile_z: float | None = None
-
-    # --- Decay and clearing ---
 
     # How long terrain points persist before expiring (s).
     decay_time: float | None = None
@@ -120,14 +112,10 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     # Minimum points per terrain block for valid classification.
     min_block_point_count: int | None = None
 
-    # --- Voxel culling ---
-
     # Reprocess a voxel after this many new points accumulate.
     voxel_point_update_threshold: int | None = None
     # Cull a voxel after this many seconds since last update (s).
     voxel_time_update_threshold: float | None = None
-
-    # --- Dynamic obstacle filtering ---
 
     # Minimum distance from sensor for dynamic obstacle detection (m).
     min_dynamic_obstacle_distance: float | None = None
@@ -141,8 +129,6 @@ class TerrainAnalysisConfig(NativeModuleConfig):
     min_dynamic_obstacle_point_count: int | None = None
     # Minimum out-of-FOV points before classifying as dynamic.
     min_out_of_fov_point_count: int | None = None
-
-    # --- Ground lift limits ---
 
     # Whether to consider terrain drops (negative slopes).
     consider_drop: bool | None = None

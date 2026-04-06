@@ -44,11 +44,11 @@ class LocalPlannerConfig(NativeModuleConfig):
     Fields with ``None`` default are omitted from the CLI.
     """
 
-    # Build from the vendored local source in ./repo so we can patch the C++.
-    cwd: str | None = str(Path(__file__).resolve().parent / "repo")
+    cwd: str | None = str(Path(__file__).resolve().parent)
     executable: str = "result/bin/local_planner"
-    build_command: str | None = "nix build --no-write-lock-file"
-    rebuild_on_change: list[str] = ["main.cpp"]  # type: ignore[assignment]
+    build_command: str | None = (
+        "nix build github:dimensionalOS/dimos-module-local-planner/v0.1.1 --no-write-lock-file"
+    )
 
     # C++ binary uses camelCase CLI args (except paths_dir).
     cli_name_override: dict[str, str] = {
@@ -80,21 +80,15 @@ class LocalPlannerConfig(NativeModuleConfig):
     # Vehicle config: "omniDir" for mecanum, "standard" for ackermann.
     vehicle_config: str = "omniDir"
 
-    # --- Speed limits ---
-
     # Maximum velocity the planner will command (m/s).
     max_speed: float = 2.0
     # Velocity cap during autonomous navigation (m/s).
     autonomy_speed: float = 1.0
 
-    # --- Mode flags ---
-
     # Enable fully autonomous waypoint-following mode.
     autonomy_mode: bool | None = None
     # Use terrain analysis cost map for obstacle avoidance.
     use_terrain_analysis: bool | None = None
-
-    # --- Obstacle detection ---
 
     # Points higher than this above ground are classified as obstacles (m).
     obstacle_height_threshold: float = 0.15
@@ -102,8 +96,6 @@ class LocalPlannerConfig(NativeModuleConfig):
     max_relative_z: float | None = None
     # Height-band filter: minimum z relative to robot (m).
     min_relative_z: float | None = None
-
-    # --- Goal parameters ---
 
     # Minimum clearance around goal position for path planning (m).
     goal_clearance: float = 0.5
