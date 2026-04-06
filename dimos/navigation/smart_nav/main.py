@@ -30,9 +30,12 @@ module's config via per-module kwarg dicts (e.g.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from dimos.core.blueprints import Blueprint, autoconnect
+
+logger = logging.getLogger(__name__)
 from dimos.navigation.cmd_vel_mux import CmdVelMux
 from dimos.navigation.smart_nav.modules.click_to_goal.click_to_goal import ClickToGoal
 from dimos.navigation.smart_nav.modules.far_planner.far_planner import FarPlanner
@@ -107,6 +110,20 @@ def smart_nav(
     Returns:
         An autoconnected Blueprint with the selected modules wired together.
     """
+    terrain_analysis_config = {**(terrain_analysis or {})}
+    local_planner_config = {**(local_planner or {})}
+    terrain_analysis_threshold = terrain_analysis_config.get("obstacle_height_threshold", 0.2)
+    local_planner_threshold = local_planner_config.get("obstacle_height_threshold", 0.2)
+    if terrain_analysis_threshold < local_planner_threshold:
+        logger.warning(
+            "terrain_analysis obstacle_height_threshold (%.3f) < "
+            "local_planner obstacle_height_threshold (%.3f). "
+            "Terrain analysis will pass through points that local_planner "
+            "treats as hard obstacles, causing phantom obstacle blocking.",
+            terrain_analysis_threshold,
+            local_planner_threshold,
+        )
+
     modules: list[Blueprint] = [
         TerrainAnalysis.blueprint(
             **{
