@@ -172,6 +172,7 @@ def did_change(
     cwd: str | Path | None = None,
     *,
     update: bool = True,
+    extra_hash: str | None = None,
 ) -> bool:
     """Check if any files/dirs matching the given paths have changed since last check.
 
@@ -214,6 +215,9 @@ def did_change(
             after checking.  Set to ``False`` to check without updating — this
             lets the caller decide whether to update (e.g. only after a
             successful build via :func:`update_cache`).
+        extra_hash: Optional extra string folded into the hash (e.g. a build
+            command), so changes to it trigger a rebuild even if source files
+            are unchanged.
 
     Returns ``True`` on the first call (no previous cache), and on subsequent
     calls returns ``True`` only if file contents differ from the last check.
@@ -237,6 +241,11 @@ def did_change(
         return False
 
     current_hash = _hash_files(files)
+    if extra_hash:
+        h = xxhash.xxh64()
+        h.update(current_hash.encode())
+        h.update(extra_hash.encode())
+        current_hash = h.hexdigest()
 
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -266,6 +275,7 @@ def update_cache(
     cache_name: str,
     paths: Sequence[PathEntry],
     cwd: str | Path | None = None,
+    extra_hash: str | None = None,
 ) -> None:
     """Write the current file hash to the cache without checking for changes.
 
@@ -274,9 +284,9 @@ def update_cache(
 
     Example::
 
-        if did_change("my_build", sources, update=False):
+        if did_change("my_build", sources, update=False, extra_hash=cmd):
             run_build()          # might fail
-            update_cache("my_build", sources)  # only update on success
+            update_cache("my_build", sources, extra_hash=cmd)  # only on success
     """
     if not paths:
         return
@@ -286,6 +296,11 @@ def update_cache(
         return
 
     current_hash = _hash_files(files)
+    if extra_hash:
+        h = xxhash.xxh64()
+        h.update(current_hash.encode())
+        h.update(extra_hash.encode())
+        current_hash = h.hexdigest()
 
     cache_dir = _get_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
