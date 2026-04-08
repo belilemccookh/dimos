@@ -214,7 +214,7 @@ def smart_nav(
                     # paths straight through the walls it can't currently
                     # see. 8 s was way too aggressive for that.
                     # "decay_time": 300.0,
-                    "decay_time": 4.0,
+                    "decay_time": 12.0,
                     "publish_rate": 2.0,
                     "max_range": 40.0,
                     **(terrain_map_ext or {}),

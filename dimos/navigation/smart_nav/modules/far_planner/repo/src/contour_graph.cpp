@@ -226,8 +226,12 @@ bool ContourGraph::IsPointsConnectFreePolygon(const ConnectPair& cedge,
             if (num_samples > 0) {
                 pcl::KdTreeFLANN<PCLPoint> obs_kdtree;
                 obs_kdtree.setInputCloud(FARUtil::surround_obs_cloud_);
-                // Check radius: slightly larger than robot clearance
-                const float obs_check_radius = FARUtil::robot_dim;
+                // Check radius: robot clearance distance
+                const float obs_check_radius = FARUtil::kNavClearDist;
+                // Density threshold: need enough obstacle points to confirm a wall
+                // (scattered points from door frames shouldn't block doorway edges)
+                const int density_threshold = std::max(3,
+                    static_cast<int>(FARUtil::kNavClearDist / FARUtil::kLeafSize));
                 for (int s = 1; s <= num_samples; s++) {
                     float t = static_cast<float>(s) / static_cast<float>(num_samples + 1);
                     PCLPoint sample_pt;
@@ -237,7 +241,7 @@ bool ContourGraph::IsPointsConnectFreePolygon(const ConnectPair& cedge,
                     std::vector<int> indices;
                     std::vector<float> dists;
                     obs_kdtree.radiusSearch(sample_pt, obs_check_radius, indices, dists);
-                    if (!indices.empty()) {
+                    if (static_cast<int>(indices.size()) >= density_threshold) {
                         return false;
                     }
                 }

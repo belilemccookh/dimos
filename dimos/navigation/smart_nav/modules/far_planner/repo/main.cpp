@@ -299,6 +299,82 @@ static void signal_handler(int /*sig*/) {
 }
 
 // ---------------------------------------------------------------------------
+// Waypoint projection: push waypoints away from obstacle surfaces
+// Based on Algorithm 6 (Figure 14) from the FPS paper.
+// ---------------------------------------------------------------------------
+
+/// Project a nav waypoint away from obstacle surfaces into free space.
+/// Uses the node's surf_dirs to determine the "away from wall" direction,
+/// then ray-traces along that direction using the obstacle cloud to find
+/// how far the waypoint can be extended.
+static Point3D ProjectWaypointFromObstacles(
+    const NavNodePtr& nav_node,
+    const Point3D& robot_position,
+    float local_planner_range)
+{
+    if (nav_node == nullptr) return Point3D(0,0,0);
+
+    Point3D waypoint = nav_node->position;
+
+    // Only project CONVEX nodes (nodes on obstacle corners that face outward)
+    if (nav_node->free_direct != NodeFreeDirect::CONVEX) return waypoint;
+    if (FARUtil::surround_obs_cloud_ == nullptr || FARUtil::surround_obs_cloud_->empty()) return waypoint;
+
+    // Compute surface normal direction (away from obstacle)
+    bool is_wall = false;
+    const Point3D surf_dir = -FARUtil::SurfTopoDirect(nav_node->surf_dirs, is_wall);
+    if (is_wall || surf_dir.norm() < FARUtil::kEpsilon) return waypoint;
+
+    // Crop obstacle cloud around the waypoint
+    PointCloudPtr local_obs(new pcl::PointCloud<PCLPoint>());
+    float search_dist = std::min(local_planner_range, (nav_node->position - robot_position).norm());
+    search_dist = std::max(search_dist, FARUtil::robot_dim * 2.5f);
+    FARUtil::CropPCLCloud(FARUtil::surround_obs_cloud_, local_obs,
+                          nav_node->position, search_dist + FARUtil::kNearDist);
+
+    if (local_obs->empty()) {
+        // No obstacles nearby — extend fully
+        return waypoint + surf_dir * search_dist;
+    }
+
+    // Build KD-tree for collision checking
+    pcl::KdTreeFLANN<PCLPoint> obs_kdtree;
+    obs_kdtree.setInputCloud(local_obs);
+
+    const float step = FARUtil::kNearDist;
+    const float collision_radius = FARUtil::kNearDist / 2.0f + FARUtil::kLeafSize;
+    const int collision_threshold = static_cast<int>(std::floor(FARUtil::kNearDist / FARUtil::kLeafSize));
+
+    // Ray-trace outward from the node along surf_dir
+    Point3D test_p = waypoint + surf_dir * step;
+    float extend_dist = step;
+    float max_extend = std::min(search_dist, (robot_position - nav_node->position).norm());
+    max_extend = std::max(max_extend, 0.0f);
+
+    while (extend_dist < max_extend) {
+        PCLPoint query;
+        query.x = test_p.x; query.y = test_p.y; query.z = test_p.z;
+        std::vector<int> indices;
+        std::vector<float> dists;
+        obs_kdtree.radiusSearch(query, collision_radius, indices, dists);
+
+        if (static_cast<int>(indices.size()) > collision_threshold) {
+            // Hit obstacle — back up and average with original position
+            waypoint = (nav_node->position + test_p - surf_dir * step) / 2.0f;
+            waypoint.z = nav_node->position.z;
+            return waypoint;
+        }
+
+        waypoint = test_p;
+        test_p = test_p + surf_dir * step;
+        extend_dist += step;
+    }
+
+    waypoint.z = nav_node->position.z;
+    return waypoint;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -518,6 +594,12 @@ int main(int argc, char** argv) {
     // the goal. In our single-shot LCM design, we must handle retries ourselves.
     bool has_pending_goal = false;
     Point3D pending_goal_pos(0, 0, 0);
+    // Waypoint smoothing: track last published waypoint to reduce churn
+    Point3D last_published_waypoint(0, 0, 0);
+    bool has_published_waypoint = false;
+    NavNodePtr last_nav_node = nullptr;
+    // Heading momentum for smooth waypoint projection (matches original nav_heading_)
+    Point3D nav_heading(0, 0, 0);
 
     // ── Main loop ──────────────────────────────────────────────────────────
     float loop_period_ms = 1000.0f / update_rate;
@@ -753,9 +835,8 @@ int main(int argc, char** argv) {
                            robot_pos.x, robot_pos.y);
                     fflush(stdout);
                 }
-
-                // Update graph planner with latest nav graph (done in MainLoopCallBack in original)
-                graph_planner.UpdaetVGraph(dynamic_graph.GetNavGraph());
+                // NOTE: UpdaetVGraph is called in the planning block below,
+                // AFTER UpdateGoalNavNodeConnects, matching the original order.
 
                 // Publish debug visualization: graph nodes (as nav_msgs/Path, decoded as GraphNodes3D)
                 // orientation.w encodes node type: 0=normal, 1=odom, 2=goal, 3=frontier, 4=navpoint
@@ -783,15 +864,23 @@ int main(int argc, char** argv) {
                 }
 
                 // Publish debug visualization: graph edges (as nav_msgs/Path, decoded as LineSegments3D)
-                // Consecutive pose pairs form edge segments
+                // Consecutive pose pairs form edge segments.
+                // orientation.w encodes traversability:
+                //   1.0 = both endpoints traversable (reachable from robot)
+                //   0.5 = one endpoint traversable
+                //   0.0 = neither endpoint traversable (unreachable)
                 if (!g_graph_edges_topic.empty() && frame_count % 5 == 0) {
                     const NodePtrStack& viz_graph = dynamic_graph.GetNavGraph();
-                    // Collect unique edges (avoid duplicates since edges are bidirectional)
-                    std::vector<std::pair<Point3D, Point3D>> edges;
+                    // Collect unique edges with traversability label
+                    struct EdgeInfo { Point3D a, b; float trav; };
+                    std::vector<EdgeInfo> edges;
                     for (const auto& n : viz_graph) {
                         for (const auto& neighbor : n->connect_nodes) {
-                            if (n->id < neighbor->id) {  // only one direction
-                                edges.push_back({n->position, neighbor->position});
+                            if (n->id < neighbor->id) {
+                                float trav = 0.0f;
+                                if (n->is_traversable && neighbor->is_traversable) trav = 1.0f;
+                                else if (n->is_traversable || neighbor->is_traversable) trav = 0.5f;
+                                edges.push_back({n->position, neighbor->position, trav});
                             }
                         }
                     }
@@ -804,14 +893,14 @@ int main(int argc, char** argv) {
                         auto& p2 = edges_msg.poses[i * 2 + 1];
                         p1.header = edges_msg.header;
                         p2.header = edges_msg.header;
-                        p1.pose.position.x = edges[i].first.x;
-                        p1.pose.position.y = edges[i].first.y;
-                        p1.pose.position.z = edges[i].first.z;
-                        p1.pose.orientation.w = 1.0;
-                        p2.pose.position.x = edges[i].second.x;
-                        p2.pose.position.y = edges[i].second.y;
-                        p2.pose.position.z = edges[i].second.z;
-                        p2.pose.orientation.w = 1.0;
+                        p1.pose.position.x = edges[i].a.x;
+                        p1.pose.position.y = edges[i].a.y;
+                        p1.pose.position.z = edges[i].a.z;
+                        p1.pose.orientation.w = edges[i].trav;
+                        p2.pose.position.x = edges[i].b.x;
+                        p2.pose.position.y = edges[i].b.y;
+                        p2.pose.position.z = edges[i].b.z;
+                        p2.pose.orientation.w = edges[i].trav;
                     }
                     g_lcm->publish(g_graph_edges_topic, &edges_msg);
                 }
@@ -849,10 +938,12 @@ int main(int argc, char** argv) {
         const NavNodePtr goal_ptr = graph_planner.GetGoalNodePtr();
         const NavNodePtr odom_node = dynamic_graph.GetOdomNode();
         if (goal_ptr == nullptr && is_map_init && odom_node != nullptr) {
-            // No goal — update traversability to keep odom_node_ptr_ set
+            // No goal — still update graph + traversability (matches original line 281)
+            graph_planner.UpdaetVGraph(dynamic_graph.GetNavGraph());
             graph_planner.UpdateGraphTraverability(odom_node, nullptr);
         } else if (goal_ptr != nullptr && is_map_init && odom_node != nullptr) {
-            // 1. Update free terrain grid for goal adjustment
+            // Matches original FARMaster::PlanningCallBack order (lines 286-303):
+            // 1. UpdateFreeTerrainGrid
             const Point3D ori_p = graph_planner.GetOriginNodePos(true);
             PointCloudPtr goal_obs(new pcl::PointCloud<PCLPoint>());
             PointCloudPtr goal_free(new pcl::PointCloud<PCLPoint>());
@@ -860,13 +951,16 @@ int main(int argc, char** argv) {
             map_handler.GetCloudOfPoint(ori_p, goal_free, CloudType::FREE_CLOUD, true);
             graph_planner.UpdateFreeTerrainGrid(ori_p, goal_obs, goal_free);
 
-            // 2. Re-evaluate goal position (uses odom_node_ptr_ from prev frame)
+            // 2. ReEvaluateGoalPosition (uses odom_node_ptr_ from prev frame)
             graph_planner.ReEvaluateGoalPosition(goal_ptr, !FARUtil::IsMultiLayer);
 
-            // 3. Update goal node connectivity (creates edges to goal)
+            // 3. UpdateGoalNavNodeConnects — creates edges TO the goal node
             graph_planner.UpdateGoalNavNodeConnects(goal_ptr);
 
-            // 4. Update traversability (Dijkstra — needs edges from step 3)
+            // 4. UpdaetVGraph — MUST be after step 3 so goal edges are included
+            graph_planner.UpdaetVGraph(dynamic_graph.GetNavGraph());
+
+            // 5. UpdateGraphTraverability (Dijkstra — uses edges from steps 3+4)
             graph_planner.UpdateGraphTraverability(odom_node, goal_ptr);
 
             // Plan path to goal
@@ -882,29 +976,80 @@ int main(int argc, char** argv) {
                 is_fails, is_succeed, is_free_nav);
 
             if (plan_success && nav_waypoint != nullptr) {
-                // Publish waypoint
-                if (!g_way_point_topic.empty()) {
-                    Point3D waypoint = nav_waypoint->position;
-                    auto wp_msg = point3d_to_lcm_point_stamped(waypoint, now_sec);
-                    g_lcm->publish(g_way_point_topic, &wp_msg);
+                // Project waypoint away from obstacle surfaces (Algorithm 6 / Figure 14)
+                Point3D waypoint;
+                float free_dist = local_planner_range;
+                if (nav_waypoint != goal_ptr && is_viewpoint_extend) {
+                    waypoint = ProjectWaypointFromObstacles(
+                        nav_waypoint, robot_pos, local_planner_range);
+                } else {
+                    waypoint = nav_waypoint->position;
                 }
 
-                // Publish path
-                if (!g_goal_path_topic.empty() && !global_path.empty()) {
-                    auto path_msg = path_to_lcm_path(global_path, now_sec);
-                    g_lcm->publish(g_goal_path_topic, &path_msg);
+                // Heading momentum (matches original ProjectNavWaypoint lines 392-411)
+                // Smooths heading changes using previous direction to prevent jitter
+                bool is_momentum = (last_nav_node == nav_waypoint) ||
+                    (last_nav_node != nullptr &&
+                     (last_nav_node->position - nav_waypoint->position).norm() < FARUtil::kNearDist);
+                const Point3D diff_p = waypoint - robot_pos;
+                Point3D new_heading;
+                if (is_momentum && nav_heading.norm() > FARUtil::kEpsilon) {
+                    const float hdist = free_dist / 2.0f;
+                    const float ratio = std::min(hdist, diff_p.norm()) / hdist;
+                    new_heading = diff_p.normalize() * ratio + nav_heading * (1.0f - ratio);
+                } else {
+                    new_heading = diff_p.normalize();
+                }
+                // Prevent 180-degree heading reversal
+                if (nav_heading.norm() > FARUtil::kEpsilon && new_heading.norm_dot(nav_heading) < 0.0f) {
+                    Point3D temp_heading(nav_heading.y, -nav_heading.x, nav_heading.z);
+                    if (temp_heading.norm_dot(new_heading) < 0.0f) {
+                        temp_heading.x = -temp_heading.x;
+                        temp_heading.y = -temp_heading.y;
+                    }
+                    new_heading = temp_heading;
+                }
+                nav_heading = new_heading.normalize();
+                // Extend waypoint along heading if too close
+                if (diff_p.norm() < free_dist) {
+                    waypoint = waypoint + nav_heading * (free_dist - diff_p.norm());
+                }
+
+                // Churn reduction: only publish if waypoint moved significantly
+                // or the nav node changed
+                const float wp_change_dist = (waypoint - last_published_waypoint).norm();
+                const bool nav_node_changed = (nav_waypoint != last_nav_node);
+                const bool should_publish = !has_published_waypoint ||
+                    nav_node_changed ||
+                    wp_change_dist > FARUtil::kLeafSize * 2.0f;
+
+                if (should_publish) {
+                    if (!g_way_point_topic.empty()) {
+                        auto wp_msg = point3d_to_lcm_point_stamped(waypoint, now_sec);
+                        g_lcm->publish(g_way_point_topic, &wp_msg);
+                    }
+                    if (!g_goal_path_topic.empty() && !global_path.empty()) {
+                        auto path_msg = path_to_lcm_path(global_path, now_sec);
+                        g_lcm->publish(g_goal_path_topic, &path_msg);
+                    }
+                    last_published_waypoint = waypoint;
+                    has_published_waypoint = true;
+                    last_nav_node = nav_waypoint;
                 }
             } else if (is_fails) {
                 // Planning failed — publish robot position as waypoint to stop movement
-                // (matches original FARMaster behavior)
                 if (!g_way_point_topic.empty()) {
                     auto wp_msg = point3d_to_lcm_point_stamped(robot_pos, now_sec);
                     g_lcm->publish(g_way_point_topic, &wp_msg);
                 }
+                has_published_waypoint = false;
+                last_nav_node = nullptr;
             }
 
             if (is_succeed) {
                 has_pending_goal = false;
+                has_published_waypoint = false;
+                last_nav_node = nullptr;
                 printf("[far_planner] Goal reached!\n"); fflush(stdout);
             }
         }
