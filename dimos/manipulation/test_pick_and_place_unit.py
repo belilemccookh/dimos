@@ -85,6 +85,14 @@ class TestFindObjectInDetections:
         result = module._find_object_in_detections("anything", object_id="abc1")
         assert result is det
 
+    def test_find_by_object_id_ambiguous_returns_none(self, module):
+        det1 = _make_det_object(object_id="abc12345")
+        det2 = _make_det_object(object_id="abc19999")
+        module._detection_snapshot = [det1, det2]
+
+        result = module._find_object_in_detections("anything", object_id="abc1")
+        assert result is None
+
     def test_find_missing_returns_none(self, module):
         module._detection_snapshot = [_make_det_object(name="bottle")]
 
