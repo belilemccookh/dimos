@@ -31,6 +31,45 @@ if TYPE_CHECKING:
 matplotlib.use("Agg")
 
 
+def _break_on_gaps(
+    ts: list[float],
+    values: list[float],
+    max_gap: float | None,
+    fill: float | None = None,
+) -> tuple[list[float], list[float]]:
+    """Handle gaps in a series. Returns (ts', values') ready to plot.
+
+    When two consecutive samples are more than ``max_gap`` apart in x:
+
+    - ``fill is None``: insert ``(NaN, NaN)`` between them. matplotlib's
+      ``plot`` skips line segments touching a NaN endpoint, so the line
+      visually breaks across the gap.
+    - ``fill is not None``: insert ``(prev_t, fill)`` and ``(next_t, fill)``,
+      so the line drops vertically at the prev sample, runs flat at ``fill``
+      across the gap, then rises vertically at the next sample.
+
+    Returns the arrays unchanged when ``max_gap`` is ``None``.
+    """
+    if max_gap is None or len(ts) < 2:
+        return list(ts), list(values)
+    out_ts: list[float] = [ts[0]]
+    out_v: list[float] = [values[0]]
+    nan = float("nan")
+    for i in range(1, len(ts)):
+        if ts[i] - ts[i - 1] > max_gap:
+            if fill is None:
+                out_ts.append(nan)
+                out_v.append(nan)
+            else:
+                out_ts.append(ts[i - 1])
+                out_v.append(fill)
+                out_ts.append(ts[i])
+                out_v.append(fill)
+        out_ts.append(ts[i])
+        out_v.append(values[i])
+    return out_ts, out_v
+
+
 def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
     """Render a Plot to an SVG string via matplotlib."""
     with plt.style.context("dark_background"):
@@ -41,12 +80,21 @@ def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
 
         # Lazily create twin y-axes for any element with axis != None.
         # All twins share the primary x-axis (matplotlib `ax.twinx()`).
+        # The first twin sits at the default right edge; each additional twin
+        # gets its right spine pushed outward in axes-relative coordinates so
+        # their tick labels form a ladder instead of stacking on top of each
+        # other. The figure's right margin grows below to make room.
         axes: dict[str | None, Any] = {None: ax}
+        twin_offset_step = 0.10
 
         def axis_for(name: str | None) -> Any:
             if name not in axes:
                 twin = ax.twinx()
                 twin.set_facecolor("none")
+                # Index among twins: 0 = first (no offset), 1 = second, ...
+                twin_index = sum(1 for k in axes if k is not None)
+                if twin_index > 0:
+                    twin.spines["right"].set_position(("axes", 1.0 + twin_offset_step * twin_index))
                 axes[name] = twin
             return axes[name]
 
@@ -61,19 +109,34 @@ def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
         }
         color_iter = palette_iter(exclude=explicit_colors)
 
+        # Track the dominant color of each twin axis (the color of the first
+        # Series/Markers landed on it) so we can color-code its spine and tick
+        # labels after the plot loop. Primary axis stays neutral so its ticks
+        # read as the baseline.
+        axis_colors: dict[str, str] = {}
+
         for el in plot.elements:
             target = axis_for(el.axis)
             color = el.color
             if color is None and isinstance(el, (Series, Markers)):
                 color = next(color_iter)
+            if (
+                el.axis is not None
+                and el.axis not in axis_colors
+                and isinstance(el, (Series, Markers))
+                and color is not None
+            ):
+                axis_colors[el.axis] = color
             if isinstance(el, Series):
+                ts, values = _break_on_gaps(el.ts, el.values, el.connect, el.gap_fill)
                 target.plot(
-                    el.ts,
-                    el.values,
+                    ts,
+                    values,
                     color=color,
                     linewidth=el.width,
                     label=el.label,
                     alpha=el.opacity,
+                    linestyle=el.style.value,
                 )
             elif isinstance(el, Markers):
                 target.scatter(
@@ -85,15 +148,28 @@ def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
                     alpha=el.opacity,
                 )
             elif isinstance(el, HLine):
-                style = "--" if el.style == "dashed" else "-"
                 target.axhline(
                     el.y,
                     color=el.color,
-                    linestyle=style,
+                    linestyle=el.style.value,
                     linewidth=1,
                     label=el.label,
                     alpha=el.opacity,
                 )
+
+        # Thin spine + tick borders (1px) on every axes — primary and twins.
+        # Color-code each twin's right spine and y tick labels with the color
+        # of its first Series/Markers, so users can tell which numbers belong
+        # to which series. Primary axis stays neutral.
+        for name, axes_obj in axes.items():
+            for spine in axes_obj.spines.values():
+                spine.set_linewidth(1)
+            axes_obj.tick_params(width=1)
+            if name is not None and name in axis_colors:
+                c = axis_colors[name]
+                axes_obj.spines["right"].set_color(c)
+                axes_obj.spines["right"].set_linewidth(1)
+                axes_obj.tick_params(axis="y", colors=c, width=1)
 
         # Combine handles from all axes into a single legend. Attach it to the
         # *last* axes created (the most recent twin, or the primary if there
@@ -116,7 +192,18 @@ def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
             )
 
         ax.set_xlabel("time (s)")
-        fig.tight_layout()
+
+        # Make room on the right for offset twin spines (each extra twin past
+        # the first needs about `twin_offset_step` of axes-relative width).
+        # `tight_layout` doesn't know about offset spines and will clip them,
+        # so for 2+ twins we use explicit margins instead.
+        n_twins = sum(1 for k in axes if k is not None)
+        if n_twins >= 2:
+            extras = n_twins - 1
+            right_margin = max(0.6, 0.95 - twin_offset_step * extras)
+            fig.subplots_adjust(left=0.08, right=right_margin, top=0.95, bottom=0.18)
+        else:
+            fig.tight_layout()
 
         buf = io.StringIO()
         fig.savefig(buf, format="svg")

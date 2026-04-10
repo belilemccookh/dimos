@@ -16,6 +16,7 @@ from dimos.memory2.vis.space.elements import Point
 
 
 
+
 we init our recording, investigate available streams
 
 ```python session=mem
@@ -45,8 +46,6 @@ drawing.add(store.streams.color_image)
 drawing.to_svg("assets/color_image.svg")
 ```
 
-
-
 our drawing system applies turbo color scheme to timestamps by default
 
 ![output](assets/color_image.svg)
@@ -70,6 +69,7 @@ drawing.to_svg("assets/speed.svg")
 
 
 
+
 ![output](assets/speed.svg)
 
 we can do all kinds of things with this, for example map out room lighting
@@ -89,6 +89,7 @@ drawing.add(
 
 drawing.to_svg("assets/brightness.svg")
 ```
+
 
 
 
@@ -140,6 +141,7 @@ drawing.to_svg("assets/embedding.svg")
 ```
 
 
+
 ![output](assets/embedding.svg)
 
 We don't really have to deal with the whole global map actually, let's get top 10 embeddings, and render only lidar around those.
@@ -169,7 +171,7 @@ drawing.to_svg("assets/embedding_focused.svg")
 <!--Result:-->
 ```
 Stream("color_image_embedded") | vector_search(k=30)
-16:21:21.162 [inf][dimos/mapping/voxels.py       ] VoxelGrid using device: CUDA:0
+10:27:49.945 [inf][dimos/mapping/voxels.py       ] VoxelGrid using device: CUDA:0
 ```
 
 ![output](assets/embedding_focused.svg)
@@ -207,11 +209,13 @@ def plot_mosaic(frames, path, cols=5):
 
 </details>
 
+
 let's view those images
 
 ```python session=mem
 plot_mosaic(matches.map(lambda obs: obs.data).to_list(), "assets/grid.png")
 ```
+
 
 
 ![output](assets/grid.png)

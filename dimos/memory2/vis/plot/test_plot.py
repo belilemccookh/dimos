@@ -14,10 +14,12 @@
 
 """Tests for Plot builder and SVG rendering."""
 
+import math
+
 import pytest
 
 from dimos.memory2.type.observation import Observation
-from dimos.memory2.vis.plot.elements import HLine, Markers, Series
+from dimos.memory2.vis.plot.elements import HLine, Markers, Series, Style
 from dimos.memory2.vis.plot.plot import Plot
 
 
@@ -123,6 +125,19 @@ class TestPlotSVG:
         assert "speed" in svg
         assert "elapsed" in svg
 
+    def test_three_axes_offset_spines(self):
+        # Primary + two named twins. Renderer should ladder the spines so they
+        # don't collide on the right side. Just confirm it renders all three
+        # series and doesn't crash.
+        p = Plot()
+        p.add(Series(ts=[0, 1, 2], values=[10, 20, 30], label="speed"))
+        p.add(Series(ts=[0, 1, 2], values=[100, 200, 300], label="time", axis="time"))
+        p.add(Series(ts=[0, 1, 2], values=[0.1, 0.5, 0.9], label="sim", axis="semantics"))
+        svg = p.to_svg()
+        assert "<svg" in svg
+        for label in ("speed", "time", "sim"):
+            assert label in svg
+
     def test_auto_color_cycle_uses_theme_palette(self):
         # First two theme colors are blue then red. Without our shared cycle,
         # the twin-axis series would reuse the primary's first color.
@@ -132,6 +147,73 @@ class TestPlotSVG:
         svg = p.to_svg()
         assert "#3498db" in svg  # blue (first theme color, primary axis)
         assert "#e74c3c" in svg  # red  (second theme color, twin axis)
+
+    def test_series_default_style_is_solid(self):
+        s = Series(ts=[0, 1], values=[0, 1])
+        assert s.style == Style.solid
+
+    def test_series_dashed_style_renders_as_dashed(self):
+        # matplotlib emits stroke-dasharray for dashed lines
+        p = Plot()
+        p.add(Series(ts=[0, 1, 2], values=[0, 1, 2], style=Style.dashed))
+        svg = p.to_svg()
+        assert "stroke-dasharray" in svg
+
+    def test_series_dotted_style_renders_as_dotted(self):
+        p = Plot()
+        p.add(Series(ts=[0, 1, 2], values=[0, 1, 2], style=Style.dotted))
+        svg = p.to_svg()
+        assert "stroke-dasharray" in svg
+
+    def test_series_connect_breaks_on_gap(self):
+        # Three samples at t=0, 1, 5. Gap 0→1 is 1s (kept), gap 1→5 is 4s
+        # (broken). The renderer should produce SVG without crashing.
+        from dimos.memory2.vis.plot.svg import _break_on_gaps
+
+        ts, values = _break_on_gaps([0.0, 1.0, 5.0], [10.0, 20.0, 30.0], 2.0)
+        # The 4s gap should have inserted a NaN between samples 1 and 5.
+        assert len(ts) == 4
+        assert ts[0] == 0.0
+        assert ts[1] == 1.0
+        assert math.isnan(ts[2])
+        assert ts[3] == 5.0
+
+        # End-to-end through the renderer.
+        p = Plot()
+        p.add(Series(ts=[0.0, 1.0, 5.0], values=[10.0, 20.0, 30.0], connect=2.0))
+        svg = p.to_svg()
+        assert "<svg" in svg
+
+    def test_series_connect_none_keeps_all(self):
+        from dimos.memory2.vis.plot.svg import _break_on_gaps
+
+        ts, values = _break_on_gaps([0.0, 1.0, 5.0], [10.0, 20.0, 30.0], None)
+        assert ts == [0.0, 1.0, 5.0]
+        assert values == [10.0, 20.0, 30.0]
+
+    def test_series_gap_fill_zero_creates_valley(self):
+        # Drops to zero at the gap boundaries instead of breaking the line.
+        from dimos.memory2.vis.plot.svg import _break_on_gaps
+
+        ts, values = _break_on_gaps([0.0, 1.0, 5.0], [10.0, 20.0, 30.0], 2.0, fill=0.0)
+        # At the gap (between t=1 and t=5), inject (1, 0) and (5, 0).
+        assert ts == [0.0, 1.0, 1.0, 5.0, 5.0]
+        assert values == [10.0, 20.0, 0.0, 0.0, 30.0]
+
+    def test_series_gap_fill_arbitrary_value(self):
+        from dimos.memory2.vis.plot.svg import _break_on_gaps
+
+        ts, values = _break_on_gaps([0.0, 1.0, 5.0], [10.0, 20.0, 30.0], 2.0, fill=42.0)
+        assert ts == [0.0, 1.0, 1.0, 5.0, 5.0]
+        assert values == [10.0, 20.0, 42.0, 42.0, 30.0]
+
+    def test_hline_uses_style_enum(self):
+        # Default is Style.dashed; renderer should still produce dasharray
+        p = Plot()
+        p.add(Series(ts=[0, 1], values=[0, 1]))  # solid baseline so we have data
+        p.add(HLine(y=0.5, style=Style.dotted))
+        svg = p.to_svg()
+        assert "stroke-dasharray" in svg
 
     def test_opacity_appears_in_svg(self):
         # opacity=0.4 should land as opacity="0.4" on the matplotlib-rendered

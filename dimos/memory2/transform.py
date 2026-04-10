@@ -165,6 +165,30 @@ def smooth(window: int) -> FnIterTransformer[float, float]:
     return FnIterTransformer(_smooth)
 
 
+def smooth_time(seconds: float) -> FnIterTransformer[float, float]:
+    """Sliding window average over obs.data, by time.
+
+    Averages all observations whose timestamp is within ``seconds`` of the
+    current observation's timestamp. Unlike ``smooth(window)`` (which uses a
+    fixed sample count and so depends on sampling rate), the effective window
+    here adapts: dense regions average more samples, sparse regions average
+    fewer.
+    """
+    if seconds <= 0:
+        raise ValueError(f"smooth_time(seconds) requires seconds > 0, got {seconds}")
+    import collections
+
+    def _smooth(upstream: Iterator[Observation[float]]) -> Iterator[Observation[float]]:
+        buf: collections.deque[Observation[float]] = collections.deque()
+        for obs in upstream:
+            buf.append(obs)
+            while buf and obs.ts - buf[0].ts > seconds:
+                buf.popleft()
+            yield obs.derive(data=sum(o.data for o in buf) / len(buf))
+
+    return FnIterTransformer(_smooth)
+
+
 def normalize() -> FnIterTransformer[float, float]:
     """Normalize obs.data to [0, 1] range across all observations."""
 
