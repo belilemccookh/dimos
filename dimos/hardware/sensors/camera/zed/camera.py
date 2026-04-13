@@ -23,9 +23,10 @@ from pydantic import Field
 import pyzed.sl as sl
 import reactivex as rx
 
+from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
+from dimos.core.coordination.module_coordinator import ModuleCoordinator
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
-from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import Out
 from dimos.core.transport import LCMTransport
 from dimos.hardware.sensors.camera.spec import (
@@ -77,14 +78,13 @@ class ZEDCameraConfig(ModuleConfig, DepthCameraConfig):
     world_frame: str = "world"
 
 
-class ZEDCamera(DepthCameraHardware, Module[ZEDCameraConfig], perception.DepthCamera):
+class ZEDCamera(DepthCameraHardware, Module, perception.DepthCamera):
+    config: ZEDCameraConfig
     color_image: Out[Image]
     depth_image: Out[Image]
     pointcloud: Out[PointCloud2]
     camera_info: Out[CameraInfo]
     depth_camera_info: Out[CameraInfo]
-
-    default_config = ZEDCameraConfig
 
     @property
     def _camera_link(self) -> str:
@@ -462,7 +462,7 @@ class ZEDCamera(DepthCameraHardware, Module[ZEDCameraConfig], perception.DepthCa
             self._zed = None
 
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
             if self._thread.is_alive():
                 self._thread = None
 
@@ -491,10 +491,10 @@ class ZEDCamera(DepthCameraHardware, Module[ZEDCameraConfig], perception.DepthCa
 
 
 def main() -> None:
-    dimos = ModuleCoordinator(n=2)
+    dimos = ModuleCoordinator()
     dimos.start()
 
-    camera = dimos.deploy(ZEDCamera, enable_pointcloud=True, pointcloud_fps=5.0)  # type: ignore[type-var]
+    camera = dimos.deploy(ZEDCamera, enable_pointcloud=True, pointcloud_fps=5.0)
     foxglove_bridge = FoxgloveBridge()
     foxglove_bridge.start()
 
@@ -525,6 +525,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
 ZEDModule = ZEDCamera

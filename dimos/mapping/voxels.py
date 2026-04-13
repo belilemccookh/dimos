@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 import open3d as o3d  # type: ignore[import-untyped]
 import open3d.core as o3c  # type: ignore[import-untyped]
 
+from dimos.core.core import rpc
 from dimos.core.module import ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.memory2.module import StreamModule
@@ -103,8 +104,8 @@ class VoxelGrid:
         else:
             self._voxel_hashmap.activate(keys_Nx3)
 
-        self.get_global_pointcloud.invalidate_cache(self)  # type: ignore[attr-defined]
-        self.get_global_pointcloud2.invalidate_cache(self)  # type: ignore[attr-defined]
+        self.get_global_pointcloud.invalidate_cache(self)
+        self.get_global_pointcloud2.invalidate_cache(self)
 
     def _carve_and_insert(self, new_keys: o3c.Tensor) -> None:
         """Column carving: remove all existing voxels sharing (X,Y) with new_keys, then insert."""
@@ -155,8 +156,10 @@ class VoxelGrid:
         self._check_disposed()
         assert self.vbg is not None
         voxel_coords, _ = self.vbg.voxel_coordinates_and_flattened_indices()
-        pts = voxel_coords + (self._voxel_size * 0.5)
-        out = o3d.t.geometry.PointCloud(device=self._dev)
+        # Move to CPU immediately to avoid holding a large duplicate on GPU.
+        cpu = o3c.Device("CPU:0")
+        pts = voxel_coords.to(cpu) + (self._voxel_size * 0.5)
+        out = o3d.t.geometry.PointCloud(device=cpu)
         out.point["positions"] = pts
         return out
 
@@ -239,10 +242,10 @@ class VoxelGridMapperConfig(ModuleConfig):
     frame_id: str = "world"
 
 
-class VoxelGridMapper(StreamModule[VoxelGridMapperConfig]):
+class VoxelGridMapper(StreamModule):
     """Accumulate lidar point clouds into a global voxel map."""
 
-    default_config = VoxelGridMapperConfig
+    config: VoxelGridMapperConfig
 
     def pipeline(self, stream: Stream[PointCloud2]) -> Stream[PointCloud2]:
         cfg = self.config.model_dump(
@@ -252,6 +255,14 @@ class VoxelGridMapper(StreamModule[VoxelGridMapperConfig]):
 
     lidar: In[PointCloud2]
     global_map: Out[PointCloud2]
+
+    @rpc
+    def start(self) -> None:
+        super().start()
+
+    @rpc
+    def stop(self) -> None:
+        super().stop()
 
 
 def ensure_tensor_pcd(

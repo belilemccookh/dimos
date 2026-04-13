@@ -31,9 +31,8 @@ class Config(ModuleConfig):
     messages: Iterable[BaseMessage]
 
 
-class AgentTestRunner(Module[Config]):
-    default_config = Config
-
+class AgentTestRunner(Module):
+    config: Config
     agent_spec: AgentSpec
     agent: In[BaseMessage]
     agent_idle: In[bool]
@@ -60,7 +59,8 @@ class AgentTestRunner(Module[Config]):
 
     @rpc
     def on_system_modules(self, _modules: list[RPCClient]) -> None:
-        self._thread.start()
+        if not self._thread.is_alive():
+            self._thread.start()
 
     def _on_agent_idle(self, idle: bool) -> None:
         if idle:

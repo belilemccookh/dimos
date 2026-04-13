@@ -24,7 +24,7 @@ from pydantic import field_validator
 from reactivex.disposable import Disposable
 
 from dimos.core.core import rpc
-from dimos.core.module import Module, ModuleConfig, ModuleConfigT
+from dimos.core.module import Module, ModuleConfig
 from dimos.memory2.store.null import NullStore
 from dimos.memory2.store.sqlite import SqliteStore
 from dimos.memory2.stream import Stream
@@ -32,7 +32,7 @@ from dimos.memory2.stream import Stream
 logger = logging.getLogger(__name__)
 
 
-class StreamModule(Module[ModuleConfigT]):
+class StreamModule(Module):
     """Module base class that wires a memory2 stream pipeline.
 
     **Static pipeline**
@@ -136,7 +136,7 @@ class RecorderConfig(ModuleConfig):
         return p
 
 
-class Recorder(Module[RecorderConfig]):
+class Recorder(Module):
     """Records all ``In`` ports to a memory2 SQLite database.
 
     Subclass with the topics you want to record::
@@ -148,7 +148,7 @@ class Recorder(Module[RecorderConfig]):
         blueprint.add(MyRecorder, db_path="session.db")
     """
 
-    default_config = RecorderConfig
+    config: RecorderConfig
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

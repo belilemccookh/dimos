@@ -30,6 +30,7 @@ import numpy as np
 from reactivex.disposable import Disposable
 
 from dimos.agents.annotation import skill
+from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
@@ -91,7 +92,7 @@ class WavefrontConfig(ModuleConfig):
     goal_timeout: float = 15.0
 
 
-class WavefrontFrontierExplorer(Module[WavefrontConfig]):
+class WavefrontFrontierExplorer(Module):
     """
     Wavefront frontier exploration algorithm implementation.
 
@@ -106,7 +107,7 @@ class WavefrontFrontierExplorer(Module[WavefrontConfig]):
         - goal_request: Exploration goals sent to the navigator
     """
 
-    default_config = WavefrontConfig
+    config: WavefrontConfig
 
     # LCM inputs
     global_costmap: In[OccupancyGrid]
@@ -732,7 +733,7 @@ class WavefrontFrontierExplorer(Module[WavefrontConfig]):
             and self.exploration_thread.is_alive()
             and threading.current_thread() != self.exploration_thread
         ):
-            self.exploration_thread.join(timeout=2.0)
+            self.exploration_thread.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
 
         # Publish current location as goal to stop the robot.
         if self.latest_odometry is not None:

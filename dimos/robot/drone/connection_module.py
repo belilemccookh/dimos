@@ -25,6 +25,7 @@ from dimos_lcm.std_msgs import String
 from reactivex.disposable import Disposable
 
 from dimos.agents.annotation import skill
+from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
@@ -48,10 +49,10 @@ class Config(ModuleConfig):
     outdoor: bool = False
 
 
-class DroneConnectionModule(Module[Config]):
+class DroneConnectionModule(Module):
     """Module that handles drone sensor data and movement commands."""
 
-    default_config = Config
+    config: Config
 
     # Inputs
     movecmd: In[Vector3]
@@ -447,7 +448,7 @@ class DroneConnectionModule(Module[Config]):
 
         # Wait for telemetry thread to finish
         if self._telemetry_thread and self._telemetry_thread.is_alive():
-            self._telemetry_thread.join(timeout=2.0)
+            self._telemetry_thread.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
 
         # Stop video stream
         if self.video_stream:
