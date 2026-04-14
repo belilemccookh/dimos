@@ -51,8 +51,8 @@ PATCH_DIR = Path(__file__).parent / "_patches"
 # Lower T = more context switches. With ~10 LCM services and T=50ms, that's
 # ~200 wakeups/sec of pure overhead.
 # Safe range: 20 - 500 ms. Above ~500ms, RPC latency becomes visible.
-ENABLE_LCM_TIMEOUT = False
-LCM_LOOP_TIMEOUT_MS = 50  # upstream default
+ENABLE_LCM_TIMEOUT = True
+LCM_LOOP_TIMEOUT_MS = 500  # upstream default = 50
 
 
 # ------------------------------------------------------------------
