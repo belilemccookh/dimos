@@ -20,6 +20,7 @@ from contextlib import suppress
 from pathlib import Path
 import threading
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -225,11 +226,12 @@ class TestRecordReplay:
                 await asyncio.sleep(0.01)
             rec.stop_recording()
 
-            rec.play(speed=100.0)  # very fast
-            assert rec.is_playing
-            async with asyncio.timeout(5.0):
-                await rec._play_task
-            assert not rec.is_playing
+            with patch("dimos.record.record_replay.rr", autospec=True, spec_set=True):
+                rec.play(speed=100.0)  # very fast
+                assert rec.is_playing
+                async with asyncio.timeout(5.0):
+                    await rec._play_task
+                assert not rec.is_playing
 
     async def test_stop_playback(self, tmp_db: str) -> None:
         pubsub = FakePubSub()
@@ -240,10 +242,11 @@ class TestRecordReplay:
                 await asyncio.sleep(0.005)
             rec.stop_recording()
 
-            rec.play(speed=0.1)  # slow
-            await asyncio.sleep(0.1)
-            assert rec.is_playing
-            await rec.stop_playback()
+            with patch("dimos.record.record_replay.rr", autospec=True, spec_set=True):
+                rec.play(speed=0.1)  # slow
+                await asyncio.sleep(0.1)
+                assert rec.is_playing
+                await rec.stop_playback()
             assert not rec.is_playing
 
     async def test_seek(self, tmp_db: str) -> None:
