@@ -94,7 +94,7 @@ N_WORKERS: int | None = 1
 # numpy / torch / lcm codec libs spawn parallel threads by default (one per
 # core). For single-threaded operations these do nothing but burn CPU on
 # thread-pool management. Pinning to 1 often helps on replay.
-ENABLE_BLAS_PINNING = False
+ENABLE_BLAS_PINNING = True
 OMP_NUM_THREADS = 1
 MKL_NUM_THREADS = 1
 OPENBLAS_NUM_THREADS = 1
