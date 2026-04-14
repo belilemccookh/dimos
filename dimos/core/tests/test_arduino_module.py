@@ -131,17 +131,10 @@ def test_generate_header_includes_topic_enum_and_message_header(
 
 
 def test_generate_header_rejects_non_finite_float(tmp_path: Path) -> None:
-    mod = _make_module()
-    mod.config.reconnect_interval = float("inf")
-
-    # reconnect_interval is in arduino_config_exclude, so it won't even
-    # be considered.  Use a field that IS embeddable instead — add one
-    # via direct mutation of an allowed numeric field.  Using baudrate
-    # (int) won't work because it's int.  We patch config.__class__
-    # model_fields with a synthetic non-finite field via a subclass.
     class _NaNConfig(_ExampleConfig):
         nan_val: float = float("nan")
 
+    mod = _make_module()
     mod.config = _NaNConfig()
     with mock.patch.object(mod, "_build_dir", return_value=tmp_path):
         with pytest.raises(ValueError, match="non-finite"):
@@ -340,6 +333,127 @@ def test_registry_matches_main_cpp_hash_registry() -> None:
         f"in _KNOWN_TYPE_HEADERS: {sorted(only_in_cpp)}. Add them to "
         f"dimos/core/arduino_module.py::_KNOWN_TYPE_HEADERS or remove from main.cpp."
     )
+
+
+# _resolve_topics — validates LCM-typed channel strings
+
+# NOTE: these tests monkey-patch ``inputs``/``outputs`` on the ``_ExampleModule``
+# *instance* rather than relying on stream auto-discovery, because
+# ``_make_module`` uses bypass constructors that don't set up real
+# transports.  The parent ``_collect_topics`` walks transports via
+# ``getattr(self, name)._transport.topic``, so we stub the whole chain.
+
+
+class _FakeTransport:
+    def __init__(self, topic: str) -> None:
+        self.topic = topic
+
+
+class _FakeStream:
+    def __init__(self, topic: str) -> None:
+        self._transport = _FakeTransport(topic)
+
+
+def _make_module_with_topics(topics: dict[str, str]) -> _ExampleModule:
+    """Build a module whose `super()._collect_topics()` returns `topics`."""
+    mod = _make_module()
+    # Install fake streams so NativeModule._collect_topics walks them.
+    for name, topic in topics.items():
+        mod.__dict__[name] = _FakeStream(topic)
+    # Force `inputs` / `outputs` to report the fake names (otherwise
+    # the module-level reflection sees only the two In/Out stubs from
+    # _make_module).  Monkey-patch the properties on this instance.
+    inputs_list = list(topics)
+    mod.__class__.inputs = property(lambda self: inputs_list)  # type: ignore[method-assign]
+    mod.__class__.outputs = property(lambda self: [])  # type: ignore[method-assign]
+    return mod
+
+
+def test_resolve_topics_accepts_typed_lcm_channels() -> None:
+    mod = _make_module_with_topics({"twist_in": "twist_command#geometry_msgs.Twist"})
+    try:
+        resolved = mod._resolve_topics()
+        assert resolved == {"twist_in": "twist_command#geometry_msgs.Twist"}
+    finally:
+        # Unwind the monkey-patched properties so later tests see
+        # the real Module.inputs/outputs descriptors.
+        del mod.__class__.inputs
+        del mod.__class__.outputs
+
+
+def test_resolve_topics_rejects_bare_channel_names() -> None:
+    mod = _make_module_with_topics({"twist_in": "twist_command"})
+    try:
+        with pytest.raises(RuntimeError, match="'#msg_type' suffix"):
+            mod._resolve_topics()
+    finally:
+        del mod.__class__.inputs
+        del mod.__class__.outputs
+
+
+# _validate_inbound_payload_sizes — AVR SRAM guard
+
+
+# Module-scope classes for the payload-size tests.  They must live at
+# module level (not inside the test functions) because
+# ``_get_stream_types`` uses ``get_type_hints`` which re-evaluates the
+# string annotations via ``eval(..., globals=module.__dict__, ...)``
+# and can't see locals of a test function.
+from dimos.msgs.geometry_msgs.PoseWithCovariance import PoseWithCovariance
+
+
+class _BigInboundModule(ArduinoModule):
+    config: _ExampleConfig
+    pose_in: In[PoseWithCovariance]
+
+
+class _BigOutboundModule(ArduinoModule):
+    config: _ExampleConfig
+    pose_out: Out[PoseWithCovariance]
+
+
+class _Esp32Config(_ExampleConfig):
+    board_fqbn: str = "esp32:esp32:esp32"
+
+
+class _Esp32Module(ArduinoModule):
+    config: _Esp32Config
+    pose_in: In[PoseWithCovariance]
+
+
+def test_validate_inbound_payload_sizes_passes_for_small_inbound() -> None:
+    """Twist is 48 bytes encoded — well under the 256 AVR limit."""
+    mod = _make_module()
+    # twist_in is declared as In[Twist] — 48 bytes, passes.
+    mod._validate_inbound_payload_sizes(mod._get_stream_types())
+
+
+def test_validate_inbound_payload_sizes_rejects_oversized_inbound() -> None:
+    """PoseWithCovariance is 344 bytes — exceeds the 256 AVR default."""
+    mod = _BigInboundModule.__new__(_BigInboundModule)
+    mod.config = _ExampleConfig()
+    mod.__dict__["pose_in"] = In.__new__(In)
+
+    with pytest.raises(ValueError, match="DSP_MAX_PAYLOAD"):
+        mod._validate_inbound_payload_sizes(mod._get_stream_types())
+
+
+def test_validate_inbound_payload_sizes_ignores_outbound() -> None:
+    """Even an oversized *outbound* stream is fine — the Arduino owns the encoder."""
+    mod = _BigOutboundModule.__new__(_BigOutboundModule)
+    mod.config = _ExampleConfig()
+    mod.__dict__["pose_out"] = Out.__new__(Out)
+
+    mod._validate_inbound_payload_sizes(mod._get_stream_types())  # must not raise
+
+
+def test_validate_inbound_payload_sizes_skips_non_avr_board() -> None:
+    """A non-AVR FQBN skips the check entirely — non-AVR gets 1024."""
+    mod = _Esp32Module.__new__(_Esp32Module)
+    mod.config = _Esp32Config()
+    mod.__dict__["pose_in"] = In.__new__(In)
+
+    mod._validate_inbound_payload_sizes(mod._get_stream_types())  # must not raise
 
 
 def test_registry_headers_cover_all_arduino_msgs_files() -> None:

@@ -71,6 +71,11 @@ struct Bridge {
     /* Serial link currently open and threads may use g_serial_fd.  Cycles
      * per reconnect. */
     std::atomic<bool> serial_connected{false};
+    /* Set by `lcm_handler_thread` when `handleTimeout` returns an error
+     * before clearing `running`.  The main loop reads this after its
+     * join()s so we can exit(1) — letting the coordinator restart the
+     * bridge — instead of reporting a clean shutdown. */
+    std::atomic<bool> lcm_failed{false};
 
     int serial_fd{-1};
     std::mutex serial_write_mutex;
@@ -344,20 +349,22 @@ static void serial_close(int fd)
 
 static void serial_reader_thread(Bridge &b)
 {
-    enum { WAIT_START, READ_TOPIC, READ_LEN_LO, READ_LEN_HI, READ_PAYLOAD, READ_CRC } state = WAIT_START;
+    /* Framing state lives entirely inside `dsp_parser` — shared with the
+     * AVR side via `dsp_protocol.h`.  One implementation, one place to
+     * change when the wire format evolves.  Reads bytes in small chunks
+     * to amortize the `read()` syscall (VMIN=0/VTIME=1 already gives us
+     * a bounded blocking read, so bulk reads are safe). */
+    struct dsp_parser parser;
+    dsp_parser_init(&parser);
 
-    uint8_t rx_topic = 0;
-    uint16_t rx_len = 0;
-    uint16_t rx_pos = 0;
-    uint8_t rx_buf[DSP_MAX_PAYLOAD];
+    uint8_t chunk[64];
 
     /* Exit on either global shutdown or a serial disconnect flagged by the
      * writer path.  `serial_connected` being a separate atomic means that
      * `signal_handler` flipping `running` to false and the writer flipping
      * `serial_connected` to false don't race each other's meaning. */
     while (b.running.load() && b.serial_connected.load()) {
-        uint8_t by;
-        int n = read(b.serial_fd, &by, 1);
+        int n = read(b.serial_fd, chunk, sizeof(chunk));
         if (n < 0) {
             if (errno == EINTR) continue;
             fprintf(stderr, "[bridge] Serial read error: %s\n", strerror(errno));
@@ -366,77 +373,40 @@ static void serial_reader_thread(Bridge &b)
         }
         if (n == 0) continue;  /* VTIME timeout, loop back */
 
-        switch (state) {
-        case WAIT_START:
-            if (by == DSP_START_BYTE) state = READ_TOPIC;
-            break;
+        for (int i = 0; i < n; i++) {
+            enum dsp_parse_event ev = dsp_feed_byte(&parser, chunk[i]);
 
-        case READ_TOPIC:
-            rx_topic = by;
-            state = READ_LEN_LO;
-            break;
-
-        case READ_LEN_LO:
-            rx_len = by;
-            state = READ_LEN_HI;
-            break;
-
-        case READ_LEN_HI:
-            rx_len |= ((uint16_t)by << 8);
-            if (rx_len > DSP_MAX_PAYLOAD) {
-                state = WAIT_START;
-                break;
+            if (ev == DSP_PARSE_CRC_FAIL) {
+                fprintf(stderr, "[bridge] CRC mismatch on topic %u\n", parser.rx_topic);
+                continue;
             }
-            rx_pos = 0;
-            state = (rx_len == 0) ? READ_CRC : READ_PAYLOAD;
-            break;
-
-        case READ_PAYLOAD:
-            rx_buf[rx_pos++] = by;
-            if (rx_pos >= rx_len) state = READ_CRC;
-            break;
-
-        case READ_CRC: {
-            /* CRC-8/MAXIM over TOPIC + LEN_LO + LEN_HI + PAYLOAD, computed
-             * incrementally via the table.  No temporary buffer required. */
-            uint8_t expected_crc = 0x00;
-            expected_crc = _dsp_crc8_table[expected_crc ^ rx_topic];
-            expected_crc = _dsp_crc8_table[expected_crc ^ (uint8_t)(rx_len & 0xFF)];
-            expected_crc = _dsp_crc8_table[expected_crc ^ (uint8_t)((rx_len >> 8) & 0xFF)];
-            for (uint16_t k = 0; k < rx_len; k++) {
-                expected_crc = _dsp_crc8_table[expected_crc ^ rx_buf[k]];
+            if (ev == DSP_PARSE_OVERFLOW) {
+                fprintf(stderr, "[bridge] Frame length %u exceeds DSP_MAX_PAYLOAD=%d on topic %u\n",
+                        parser.rx_len, DSP_MAX_PAYLOAD, parser.rx_topic);
+                continue;
             }
-
-            if (expected_crc != by) {
-                fprintf(stderr, "[bridge] CRC mismatch on topic %u (got 0x%02X, expected 0x%02X)\n",
-                        rx_topic, by, expected_crc);
-                state = WAIT_START;
-                break;
-            }
+            if (ev != DSP_PARSE_MESSAGE) continue;
 
             /* Handle frame */
-            if (rx_topic == DSP_TOPIC_DEBUG) {
+            if (parser.rx_topic == DSP_TOPIC_DEBUG) {
                 /* Debug: print to stdout */
-                fwrite(rx_buf, 1, rx_len, stdout);
+                fwrite(parser.rx_buf, 1, parser.rx_len, stdout);
                 fflush(stdout);
             } else {
                 /* Data: prepend fingerprint hash and publish to LCM */
-                auto it = b.topic_out_map.find(rx_topic);
+                auto it = b.topic_out_map.find(parser.rx_topic);
                 if (it != b.topic_out_map.end()) {
                     TopicMapping *tm = it->second;
                     /* Build LCM message: 8-byte hash + payload */
-                    int total = 8 + rx_len;
+                    int total = 8 + parser.rx_len;
                     std::vector<uint8_t> lcm_buf(total);
                     memcpy(lcm_buf.data(), tm->fingerprint.data(), 8);
-                    memcpy(lcm_buf.data() + 8, rx_buf, rx_len);
+                    memcpy(lcm_buf.data() + 8, parser.rx_buf, parser.rx_len);
                     b.lcm->publish(tm->lcm_channel, lcm_buf.data(), total);
                 } else {
-                    fprintf(stderr, "[bridge] Unknown outbound topic: %u\n", rx_topic);
+                    fprintf(stderr, "[bridge] Unknown outbound topic: %u\n", parser.rx_topic);
                 }
             }
-            state = WAIT_START;
-            break;
-        }
         }
     }
 }
@@ -549,13 +519,16 @@ static void lcm_handler_thread(Bridge &b)
     while (b.running.load() && b.serial_connected.load()) {
         int ret = b.lcm->handleTimeout(100);  /* 100ms timeout */
         if (ret < 0) {
-            /* Flag the link down so the reader thread bails and the
-             * reconnect loop rebuilds both threads fresh — otherwise
-             * the bridge ends up half-alive (serial reader still
-             * running, LCM subscriber dead) with data flowing out of
-             * Arduino but nothing flowing in. */
-            fprintf(stderr, "[bridge] LCM handle error — cycling connection\n");
-            b.serial_connected.store(false);
+            /* LCM is sick (multicast group went away, kernel socket
+             * broke, etc.) — cycling the serial port would not help and
+             * would unnecessarily discard in-flight data on a link that
+             * is still perfectly healthy.  Instead, clear `running` so
+             * the main loop exits with a non-zero status and the
+             * coordinator can restart the whole bridge subprocess on a
+             * fresh LCM instance. */
+            fprintf(stderr, "[bridge] LCM handle error — exiting so coordinator can restart\n");
+            b.lcm_failed.store(true);
+            b.running.store(false);
             break;
         }
     }
@@ -680,5 +653,8 @@ int main(int argc, char **argv)
     }
 
     printf("[bridge] Shutting down\n");
-    return 0;
+    /* Distinguish graceful shutdown (SIGTERM/SIGINT) from an LCM failure
+     * that forced us out of the main loop.  Non-zero exit tells the
+     * coordinator to restart us with a fresh LCM subscriber. */
+    return bridge.lcm_failed.load() ? 1 : 0;
 }

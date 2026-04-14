@@ -51,7 +51,7 @@ import signal
 import subprocess
 import sys
 import threading
-from typing import IO, Any
+from typing import IO, Any, ClassVar
 
 from pydantic import Field
 
@@ -132,6 +132,13 @@ class NativeModule(Module):
 
     config: NativeModuleConfig
 
+    # Subclasses that build the full command line themselves (e.g.
+    # ``ArduinoModule`` with its numeric topic IDs) set this to ``False``
+    # so ``start()`` skips the generic ``--<stream_name> <lcm_topic>``
+    # emission loop.  They can still call ``_collect_topics()`` directly
+    # to get the mapping for their own arg builder.
+    _auto_emit_topic_cli_args: ClassVar[bool] = True
+
     _process: subprocess.Popen[bytes] | None = None
     _watchdog: threading.Thread | None = None
     _stopping: bool = False
@@ -150,11 +157,10 @@ class NativeModule(Module):
 
         self._maybe_build()
 
-        topics = self._collect_topics()
-
         cmd = [self.config.executable]
-        for name, topic_str in topics.items():
-            cmd.extend([f"--{name}", topic_str])
+        if self._auto_emit_topic_cli_args:
+            for name, topic_str in self._collect_topics().items():
+                cmd.extend([f"--{name}", topic_str])
         cmd.extend(self.config.to_cli_args())
         cmd.extend(self.config.extra_args)
 

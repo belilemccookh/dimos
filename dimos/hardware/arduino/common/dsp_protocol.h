@@ -129,6 +129,125 @@ static inline uint8_t dsp_crc8(const uint8_t *data, uint16_t len)
 }
 
 /* ======================================================================
+ * Shared parser state machine
+ *
+ * The wire-framing parser is identical on the Arduino and on the host
+ * bridge — both reconstruct a DSP frame from a byte stream — so the
+ * state struct and the single-byte step function live here, in the
+ * portable section of the header, and are #included by both sides.
+ * Historically these were duplicated in main.cpp and drifted, so
+ * protocol changes had to be made in two places with no CI guard on
+ * drift.  One definition, one place to change.
+ *
+ * Public API:
+ *   - ``struct dsp_parser``        — callers keep one per stream
+ *   - ``dsp_parser_init(&p)``      — zero-initialize before first feed
+ *   - ``dsp_feed_byte(&p, b)``     — step machine with one byte, returns
+ *                                    a ``dsp_parse_event`` telling the
+ *                                    caller what to do next
+ *
+ * Event semantics:
+ *   DSP_PARSE_NONE      — keep feeding
+ *   DSP_PARSE_MESSAGE   — complete frame; read ``p.rx_topic/rx_len/rx_buf``
+ *                         before the next ``dsp_feed_byte`` call
+ *   DSP_PARSE_CRC_FAIL  — framing OK but CRC mismatch; parser is already
+ *                         reset and ready for more
+ *   DSP_PARSE_OVERFLOW  — declared length exceeds ``DSP_MAX_PAYLOAD``;
+ *                         parser is reset
+ * ====================================================================== */
+
+enum dsp_parse_state {
+    DSP_WAIT_START,
+    DSP_READ_TOPIC,
+    DSP_READ_LEN_LO,
+    DSP_READ_LEN_HI,
+    DSP_READ_PAYLOAD,
+    DSP_READ_CRC
+};
+
+enum dsp_parse_event {
+    DSP_PARSE_NONE = 0,
+    DSP_PARSE_MESSAGE,
+    DSP_PARSE_CRC_FAIL,
+    DSP_PARSE_OVERFLOW
+};
+
+struct dsp_parser {
+    enum dsp_parse_state state;
+    uint8_t  rx_topic;
+    uint16_t rx_len;
+    uint16_t rx_payload_pos;
+    uint8_t  rx_buf[DSP_MAX_PAYLOAD];
+};
+
+static inline void dsp_parser_init(struct dsp_parser *p)
+{
+    p->state = DSP_WAIT_START;
+    p->rx_topic = 0;
+    p->rx_len = 0;
+    p->rx_payload_pos = 0;
+}
+
+static inline enum dsp_parse_event dsp_feed_byte(struct dsp_parser *p, uint8_t b)
+{
+    switch (p->state) {
+    case DSP_WAIT_START:
+        if (b == DSP_START_BYTE) {
+            p->state = DSP_READ_TOPIC;
+        }
+        return DSP_PARSE_NONE;
+
+    case DSP_READ_TOPIC:
+        p->rx_topic = b;
+        p->state = DSP_READ_LEN_LO;
+        return DSP_PARSE_NONE;
+
+    case DSP_READ_LEN_LO:
+        p->rx_len = b;
+        p->state = DSP_READ_LEN_HI;
+        return DSP_PARSE_NONE;
+
+    case DSP_READ_LEN_HI:
+        p->rx_len |= ((uint16_t)b << 8);
+        if (p->rx_len > DSP_MAX_PAYLOAD) {
+            p->state = DSP_WAIT_START;
+            return DSP_PARSE_OVERFLOW;
+        }
+        p->rx_payload_pos = 0;
+        p->state = (p->rx_len == 0) ? DSP_READ_CRC : DSP_READ_PAYLOAD;
+        return DSP_PARSE_NONE;
+
+    case DSP_READ_PAYLOAD:
+        p->rx_buf[p->rx_payload_pos++] = b;
+        if (p->rx_payload_pos >= p->rx_len) {
+            p->state = DSP_READ_CRC;
+        }
+        return DSP_PARSE_NONE;
+
+    case DSP_READ_CRC: {
+        /* CRC-8/MAXIM over TOPIC + LEN_LO + LEN_HI + PAYLOAD, computed
+         * incrementally via the table.  No temporary buffer needed. */
+        uint8_t crc = 0x00;
+        crc = DSP_CRC_READ(&_dsp_crc8_table[crc ^ p->rx_topic]);
+        crc = DSP_CRC_READ(&_dsp_crc8_table[crc ^ (uint8_t)(p->rx_len & 0xFF)]);
+        crc = DSP_CRC_READ(&_dsp_crc8_table[crc ^ (uint8_t)((p->rx_len >> 8) & 0xFF)]);
+        for (uint16_t k = 0; k < p->rx_len; k++) {
+            crc = DSP_CRC_READ(&_dsp_crc8_table[crc ^ p->rx_buf[k]]);
+        }
+
+        p->state = DSP_WAIT_START;
+        if (crc == b) {
+            return DSP_PARSE_MESSAGE;
+        }
+        return DSP_PARSE_CRC_FAIL;
+    }
+    }
+    /* Unreachable — every enum value is handled above.  Reset defensively. */
+    p->state = DSP_WAIT_START;
+    return DSP_PARSE_NONE;
+}
+
+/* ======================================================================
  * Platform abstraction (Arduino vs host C++)
  *
  * On Arduino: uses HardwareSerial directly.
@@ -191,43 +310,20 @@ static inline uint8_t _dsp_usart_read(void) {
  * .ino files ends up with one independent state machine per TU — the
  * second TU's `dimos_check_message()` would see an empty buffer.
  *
- * We put the state in a struct and expose it via a plain (non-static)
- * `inline` function whose function-local static is guaranteed by the C++
- * standard to resolve to a single object across TUs.  Users who
- * `#include` this header twice in the same TU are still fine because
- * `static inline` functions elsewhere (dimos_send, dimos_check_message)
- * all funnel through this one accessor. */
+ * We expose the parser via a plain (non-``static``) ``inline`` function
+ * whose function-local static is guaranteed by the C++ standard to
+ * resolve to a single object across TUs.  The parser struct and the
+ * step function themselves live above, in the portable section shared
+ * with the host bridge. */
 
-enum _dsp_parse_state {
-    DSP_WAIT_START,
-    DSP_READ_TOPIC,
-    DSP_READ_LEN_LO,
-    DSP_READ_LEN_HI,
-    DSP_READ_PAYLOAD,
-    DSP_READ_CRC
-};
-
-struct _dsp_state_t {
-    uint8_t  rx_buf[DSP_MAX_PAYLOAD];
-    bool     msg_ready;
-    enum _dsp_parse_state state;
-    uint8_t  rx_topic;
-    uint16_t rx_len;
-    uint16_t rx_payload_pos;
-};
-
-/* NOT `static inline` — we want external linkage so the linker
- * collapses this to a single definition, and with it a single
- * function-local static. */
-inline _dsp_state_t &_dsp_state_ref(void)
+inline struct dsp_parser &_dsp_state_ref(void)
 {
-    static _dsp_state_t s = {
-        /* rx_buf         */ {0},
-        /* msg_ready      */ false,
+    static struct dsp_parser s = {
         /* state          */ DSP_WAIT_START,
         /* rx_topic       */ 0,
         /* rx_len         */ 0,
         /* rx_payload_pos */ 0,
+        /* rx_buf         */ {0},
     };
     return s;
 }
@@ -239,9 +335,7 @@ inline _dsp_state_t &_dsp_state_ref(void)
 static inline void dimos_init(uint32_t baud)
 {
     _dsp_usart_init(baud);
-    _dsp_state_t &s = _dsp_state_ref();
-    s.state = DSP_WAIT_START;
-    s.msg_ready = false;
+    dsp_parser_init(&_dsp_state_ref());
 }
 
 /**
@@ -307,80 +401,19 @@ static inline void dimos_send(enum dimos_topic topic, const uint8_t *data, uint1
 
 static inline bool dimos_check_message(void)
 {
-    _dsp_state_t &s = _dsp_state_ref();
-
-    /* If a previous message is still unconsumed, clear it */
-    s.msg_ready = false;
+    struct dsp_parser &s = _dsp_state_ref();
 
     uint16_t bytes_processed = 0;
     while (_dsp_usart_available() && bytes_processed < DSP_CHECK_MAX_BYTES) {
         uint8_t b = _dsp_usart_read();
         bytes_processed++;
 
-        switch (s.state) {
-        case DSP_WAIT_START:
-            if (b == DSP_START_BYTE) {
-                s.state = DSP_READ_TOPIC;
-            }
-            break;
-
-        case DSP_READ_TOPIC:
-            s.rx_topic = b;
-            s.state = DSP_READ_LEN_LO;
-            break;
-
-        case DSP_READ_LEN_LO:
-            s.rx_len = b;
-            s.state = DSP_READ_LEN_HI;
-            break;
-
-        case DSP_READ_LEN_HI:
-            s.rx_len |= ((uint16_t)b << 8);
-            if (s.rx_len > DSP_MAX_PAYLOAD) {
-                s.state = DSP_WAIT_START;
-                break;
-            }
-            s.rx_payload_pos = 0;
-            if (s.rx_len == 0) {
-                s.state = DSP_READ_CRC;
-            } else {
-                s.state = DSP_READ_PAYLOAD;
-            }
-            break;
-
-        case DSP_READ_PAYLOAD:
-            s.rx_buf[s.rx_payload_pos++] = b;
-            if (s.rx_payload_pos >= s.rx_len) {
-                s.state = DSP_READ_CRC;
-            }
-            break;
-
-        case DSP_READ_CRC: {
-            /* Verify CRC over topic + length + payload */
-            uint8_t crc_input[3];
-            crc_input[0] = s.rx_topic;
-            crc_input[1] = (uint8_t)(s.rx_len & 0xFF);
-            crc_input[2] = (uint8_t)((s.rx_len >> 8) & 0xFF);
-
-            uint8_t crc = dsp_crc8(crc_input, 3);
-            if (s.rx_len > 0) {
-                /* Continue CRC over payload */
-                uint16_t k;
-                for (k = 0; k < s.rx_len; k++) {
-                    crc = DSP_CRC_READ(&_dsp_crc8_table[crc ^ s.rx_buf[k]]);
-                }
-            }
-
-            s.state = DSP_WAIT_START;
-
-            if (crc == b) {
-                s.msg_ready = true;
-                return true;  /* message ready — caller reads it */
-            }
-            /* CRC mismatch — discard, keep parsing */
-            break;
+        enum dsp_parse_event ev = dsp_feed_byte(&s, b);
+        if (ev == DSP_PARSE_MESSAGE) {
+            return true;
         }
-        }
+        /* DSP_PARSE_CRC_FAIL / DSP_PARSE_OVERFLOW / DSP_PARSE_NONE:
+         * the parser has already reset itself; just keep reading. */
     }
 
     return false;  /* no complete message available (yet) */
@@ -452,7 +485,18 @@ private:
     }
 };
 
-static DimosSerial_ DimosSerial;
+/* Must be `inline` (not `static inline`) so the function-local static
+ * below collapses to one object across every TU that includes this
+ * header — the same trick used by `_dsp_state_ref` above.  A plain
+ * `static DimosSerial_ DimosSerial;` here would give each TU its own
+ * buffer, and a library-backed `.cpp` writing through the name would
+ * see independent `_buf`/`_pos` state from the `.ino`. */
+inline DimosSerial_ &_dimos_serial_ref(void)
+{
+    static DimosSerial_ s;
+    return s;
+}
+#define DimosSerial (_dimos_serial_ref())
 
 /*
  * IMPORTANT: use `DimosSerial.print/println(...)` in your sketch, not

@@ -160,6 +160,28 @@ class ArduinoModuleConfig(NativeModuleConfig):
     arduino_config_exclude: frozenset[str] = frozenset()
 
 
+# Framework-owned fields on ``ArduinoModuleConfig`` that DO belong in the
+# generated sketch header (all other framework fields are host-only —
+# ``port``, ``virtual``, ``flash_timeout``, etc.).  Adding a new field
+# that the sketch needs to know about?  Add it both on the config class
+# and here, and ``_generate_header`` will emit the ``#define``.
+_ARDUINO_SKETCH_FIELDS: frozenset[str] = frozenset({"baudrate"})
+
+
+# Default ``DSP_MAX_PAYLOAD`` on AVR targets.  Must match the
+# ``#ifdef __AVR__`` branch in ``dsp_protocol.h`` — kept in sync by
+# ``test_arduino_msg_registry_sync``.  Users who override the limit for
+# a chip with more SRAM (e.g. Mega 2560) via ``-DDSP_MAX_PAYLOAD=<N>``
+# in their sketch's extra compile flags also need to document that on
+# their module's config — we can't introspect the compile flags here.
+_AVR_DEFAULT_DSP_MAX_PAYLOAD = 256
+
+# FQBN prefixes that identify an AVR microcontroller target.  Listed
+# explicitly rather than pattern-matched so a typo or unfamiliar board
+# is a hard error at validation time rather than a silent fallthrough.
+_AVR_FQBN_PREFIXES: tuple[str, ...] = ("arduino:avr:",)
+
+
 class ArduinoModule(NativeModule):
     """Module that manages an Arduino board with a generated header, sketch
     compilation, flashing, and a C++ serial↔LCM bridge.
@@ -169,6 +191,12 @@ class ArduinoModule(NativeModule):
     """
 
     config: ArduinoModuleConfig
+
+    # The bridge has its own CLI schema (``--topic_in <id> <channel>``,
+    # ``--topic_out <id> <channel>``) so we build the command line
+    # ourselves in :meth:`start` and opt out of ``NativeModule``'s
+    # generic ``--<stream_name> <topic>`` emission.
+    _auto_emit_topic_cli_args: ClassVar[bool] = False
 
     # Override for custom message type C code generation
     c_type_generators: ClassVar[dict[type, CTypeGenerator]] = {}
@@ -258,27 +286,11 @@ class ArduinoModule(NativeModule):
             finally:
                 fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
 
-    def _collect_topics(self) -> dict[str, str]:
-        """Suppress NativeModule's generic ``--<stream> <topic>`` emission.
-
-        ``NativeModule.start()`` iterates whatever this returns and
-        appends one ``--<name> <topic>`` pair per entry to the subprocess
-        command line.  The arduino_bridge binary has its own CLI schema
-        (``--topic_in <id> <channel>`` / ``--topic_out <id> <channel>``)
-        and rejects unknown flags with ``exit(1)``, so we return an
-        empty dict here and call :meth:`_resolve_topics` explicitly in
-        :meth:`start` to get the real mapping for our own arg builder.
-        """
-        return {}
-
     def _resolve_topics(self) -> dict[str, str]:
-        """Get the real ``{stream_name: lcm_channel}`` mapping.
+        """Get the ``{stream_name: lcm_channel}`` mapping for the bridge.
 
-        Delegates to ``NativeModule._collect_topics`` — we need the same
-        logic, but we invoke it ourselves instead of letting the parent
-        ``start()`` use it to emit CLI args.
-
-        Validates that each channel string has the ``"topic#msg_type"``
+        Wraps :meth:`NativeModule._collect_topics` with a validation
+        pass: each channel string must have the ``"topic#msg_type"``
         shape the ``arduino_bridge`` binary expects.  ``LCMTransport``
         produces this shape via ``LCMTopic.__str__`` when given a typed
         topic; other transports (``pLCMTransport``, ``SHMTransport``,
@@ -286,7 +298,7 @@ class ArduinoModule(NativeModule):
         with "Unknown message type: " at startup.  Fail fast at build
         time with a clearer error instead.
         """
-        raw = NativeModule._collect_topics(self)
+        raw = super()._collect_topics()
         bad: list[tuple[str, str]] = []
         for stream_name, channel in raw.items():
             if "#" not in channel:
@@ -442,6 +454,58 @@ class ArduinoModule(NativeModule):
     # usable — 255 streams per ArduinoModule.
     MAX_TOPICS: ClassVar[int] = 255
 
+    def _validate_inbound_payload_sizes(self, stream_types: dict[str, type]) -> None:
+        """Fail the build if a host→Arduino stream exceeds AVR's DSP_MAX_PAYLOAD.
+
+        The AVR-side parser (``dimos_check_message`` in
+        ``dsp_protocol.h``) allocates a fixed ``_dsp_rx_buf`` sized by
+        ``DSP_MAX_PAYLOAD`` (256 on AVR by default) and silently drops
+        any frame with ``rx_len > DSP_MAX_PAYLOAD``.  Without this
+        check, a user declaring e.g. ``pose_in: In[PoseWithCovariance]``
+        (344 bytes) on an Uno would get a module that starts, compiles,
+        flashes, and silently discards every inbound message — very hard
+        to diagnose.
+
+        Only inbound streams (``In[T]``) need the check: the host-side
+        buffer is 1024 bytes, and outbound streams are constructed on
+        the Arduino so the sketch can't exceed the AVR buffer it itself
+        allocated.
+
+        Outputs the check for AVR targets only — non-AVR boards (e.g.
+        ESP32 via ``esp32:esp32:*``) compile without the ``__AVR__``
+        branch and get the 1024-byte default, which is already enough
+        for every message type we ship.
+        """
+        if not self.config.board_fqbn.startswith(_AVR_FQBN_PREFIXES):
+            return
+
+        limit = _AVR_DEFAULT_DSP_MAX_PAYLOAD
+        offenders: list[tuple[str, str, int]] = []
+        for name, msg_type in stream_types.items():
+            if name not in self.inputs:
+                continue  # outbound — Arduino owns the encoder, not our problem
+            size = _encoded_payload_size(msg_type)
+            if size is None:
+                continue  # custom type via c_type_generators — trust the user
+            if size > limit:
+                offenders.append((name, msg_type.__name__, size))
+        if offenders:
+            desc = "; ".join(
+                f"{name!r}: {type_name}={size}B" for name, type_name, size in offenders
+            )
+            raise ValueError(
+                f"ArduinoModule inbound stream(s) exceed the AVR "
+                f"DSP_MAX_PAYLOAD limit of {limit} bytes ({desc}). The "
+                f"AVR-side parser would silently drop every frame. "
+                f"Either (a) split the message into smaller types, "
+                f"(b) target a non-AVR board with more SRAM (e.g. "
+                f"esp32:esp32:*), or (c) if you know your board has "
+                f"enough SRAM, override the buffer in your sketch "
+                f"via `-DDSP_MAX_PAYLOAD=<bigger>` in compile flags "
+                f"and remove this check by subclassing "
+                f"`_validate_inbound_payload_sizes`."
+            )
+
     def _build_topic_enum(self) -> dict[str, int]:
         """Assign topic IDs to streams. Topic 0 is reserved for debug."""
         stream_types = self._get_stream_types()
@@ -492,8 +556,19 @@ class ArduinoModule(NativeModule):
                 f"stdout was:\n{result.stdout[:4096]}"
             ) from exc
 
+        # arduino-cli >=0.18 returns ``{"detected_ports": [...]}``, older
+        # versions returned a bare JSON list.  Accept both.  Calling
+        # ``.get`` unconditionally on a ``list`` would raise
+        # ``AttributeError`` so we branch on the shape first.
+        if isinstance(boards, list):
+            entries = boards
+        elif isinstance(boards, dict):
+            entries = boards.get("detected_ports", [])
+        else:
+            entries = []
+
         # Search for a port whose matching_boards contains our FQBN.
-        for entry in boards.get("detected_ports", boards if isinstance(boards, list) else []):
+        for entry in entries:
             port_info = entry if isinstance(entry, dict) else {}
             address = str(port_info.get("port", {}).get("address", ""))
             matching_boards = port_info.get("matching_boards", [])
@@ -512,6 +587,7 @@ class ArduinoModule(NativeModule):
         """Generate dimos_arduino.h from stream declarations + config."""
         stream_types = self._get_stream_types()
         topic_enum = self._build_topic_enum()
+        self._validate_inbound_payload_sizes(stream_types)
 
         sections: list[str] = []
 
@@ -524,18 +600,24 @@ class ArduinoModule(NativeModule):
 
         # Config #defines.
         #
-        # Emit only fields the *user* added on their ArduinoModuleConfig
-        # subclass.  Everything defined on ArduinoModuleConfig itself
-        # (which includes NativeModuleConfig's fields via inheritance)
-        # is framework plumbing — ``executable``, ``sketch_path``,
-        # ``virtual``, ``log_format``, etc. — and has no business ending
-        # up as a ``#define`` in the sketch.  Computing the base set from
-        # ``ArduinoModuleConfig.model_fields`` means new framework fields
-        # are excluded automatically, with no hand-maintained list to
-        # drift out of sync.
+        # Two categories of fields reach the sketch:
+        #   1. Fields declared on the user's ``ArduinoModuleConfig``
+        #      subclass — any field the user added is assumed to be
+        #      sketch-relevant and gets a ``#define``.
+        #   2. A small, explicit allowlist of framework-owned fields
+        #      (see ``_ARDUINO_SKETCH_FIELDS``) — currently just
+        #      ``baudrate``, but the sketch legitimately needs to know
+        #      the wire speed so it's embedded.
+        #
+        # All other ``ArduinoModuleConfig`` / ``NativeModuleConfig``
+        # fields are host-only plumbing (``executable``, ``sketch_path``,
+        # ``virtual``, ``log_format``, ...) and are skipped.  The user
+        # can also extend ``arduino_config_exclude`` to suppress fields
+        # from their own subclass.
         sections.append("/* --- Config --- */")
-        sections.append(f"#define DIMOS_BAUDRATE {self.config.baudrate}")
-        ignore_fields = set(ArduinoModuleConfig.model_fields) | set(
+        framework_fields = set(ArduinoModuleConfig.model_fields)
+        emit_framework = framework_fields & _ARDUINO_SKETCH_FIELDS
+        ignore_fields = (framework_fields - emit_framework) | set(
             self.config.arduino_config_exclude
         )
         for field_name in self.config.__class__.model_fields:
@@ -615,14 +697,19 @@ class ArduinoModule(NativeModule):
         # Close header guard
         sections.append("#endif /* DIMOS_ARDUINO_H */")
 
-        # Write into the per-module build directory rather than the
+        # Write into the per-sketch build directory rather than the
         # sketch's source directory.  Keeps the user's repo clean (no
-        # untracked generated file next to the .ino), makes multi-
-        # instance setups independent (two ArduinoModule subclasses
-        # sharing a sketch path would otherwise clobber each other's
-        # header), and the compile command already adds
-        # ``-I{build_dir}`` so ``#include "dimos_arduino.h"`` still
-        # resolves.
+        # untracked generated file next to the .ino) and the compile
+        # command already adds ``-I{build_dir}`` so ``#include
+        # "dimos_arduino.h"`` still resolves.
+        #
+        # Note: two ArduinoModule subclasses that share a ``sketch_path``
+        # share this build dir (and therefore the generated header).
+        # That's intentional — a single compiled sketch can only have
+        # one header baked in — but it means subclasses sharing a sketch
+        # must also agree on the set of streams and config fields they
+        # embed.  If you need divergent headers, give each module its
+        # own ``sketch_path``.
         #
         # We wipe the build dir first.  arduino-cli writes
         # ``includes.cache`` and ``build.options.json`` under
@@ -867,6 +954,32 @@ class ArduinoModule(NativeModule):
         if result.returncode != 0:
             raise RuntimeError(f"Arduino flash failed:\n{result.stderr}\n{result.stdout}")
         logger.info("Arduino flashed successfully", port=port)
+
+
+def _encoded_payload_size(msg_type: type) -> int | None:
+    """Return the LCM-encoded payload size of ``msg_type`` in bytes, or None.
+
+    Instantiates the type with a zero-arg constructor, calls
+    ``lcm_encode()``, and strips the 8-byte fingerprint header LCM
+    prepends (the Arduino DSP wire format doesn't carry the hash — it
+    lives in the bridge's registry).
+
+    Returns ``None`` if the type can't be introspected — no zero-arg
+    ctor, no ``lcm_encode``, or it raises.  Callers treat ``None`` as
+    "trust the user" rather than failing the build on unknown shapes.
+    """
+    try:
+        instance = msg_type()
+    except Exception:
+        return None
+    encode = getattr(instance, "lcm_encode", None)
+    if encode is None:
+        return None
+    try:
+        encoded = encode()
+    except Exception:
+        return None
+    return max(0, len(encoded) - 8)
 
 
 def _tail_text(path: str, max_bytes: int) -> str:
