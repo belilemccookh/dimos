@@ -157,10 +157,11 @@ class WebsocketVisModule(Module):
         self._uvicorn_server_thread = threading.Thread(target=self._run_uvicorn_server, daemon=True)
         self._uvicorn_server_thread.start()
 
-        # Auto-open browser only when the rerun web viewer is enabled (dashboard
-        # embeds the Rerun iframe + command center). For native rerun or
-        # foxglove, users access the command center manually if needed.
-        if self.config.g.viewer == "rerun" and self.config.g.rerun_web:
+        # Auto-open the dashboard tab only when the user explicitly asked for a
+        # web-based viewer (rerun_open == "web" or "both"). `rerun_web` alone
+        # only means "serve the viewer"; it should not trigger a browser popup
+        # when the user chose the native viewer.
+        if self.config.g.viewer == "rerun" and self.config.g.rerun_open in ("web", "both"):
             url = f"http://localhost:{self.config.port}/"
             logger.info(f"Dimensional Command Center: {url}")
 
@@ -239,7 +240,9 @@ class WebsocketVisModule(Module):
             # Serve the full dashboard (with Rerun iframe) only when the rerun
             # web server is enabled; otherwise redirect to the standalone
             # command center.
-            if not (self.config.g.viewer == "rerun" and self.config.g.rerun_web):
+            if not (
+                self.config.g.viewer == "rerun" and self.config.g.rerun_open in ("web", "both")
+            ):
                 return RedirectResponse(url="/command-center")
             return FileResponse(_DASHBOARD_HTML, media_type="text/html")
 
