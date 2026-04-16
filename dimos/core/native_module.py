@@ -93,9 +93,7 @@ class NativeModuleConfig(ModuleConfig):
         """
         ignore_fields = set(NativeModuleConfig.model_fields)
         return {
-            k: v
-            for k, v in self.model_dump().items()
-            if k not in ignore_fields and v is not None
+            k: v for k, v in self.model_dump().items() if k not in ignore_fields and v is not None
         }
 
     def to_cli_args(self) -> list[str]:
@@ -177,9 +175,10 @@ class NativeModule(Module):
             cwd=cwd,
         )
         config_dict = self.config.to_config_dict()
-        stdin_blob = json.dumps(
-            {"topics": topics, "config": config_dict if config_dict else None}
-        ).encode() + b"\n"
+        stdin_blob = (
+            json.dumps({"topics": topics, "config": config_dict if config_dict else None}).encode()
+            + b"\n"
+        )
 
         self._process = subprocess.Popen(
             cmd,
