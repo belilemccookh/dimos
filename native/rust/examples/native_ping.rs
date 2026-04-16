@@ -1,7 +1,6 @@
-// NativeModule example — ping side.
+// NativeModule ping example.
 //
 // Sends a Twist message at 5 Hz and logs each echo received on `confirm`.
-// Runs until terminated (Ctrl+C / SIGTERM from NativeModule.stop()).
 
 use dimos_native_module::{LcmTransport, NativeModule};
 use lcm_msgs::geometry_msgs::{Twist, Vector3};
@@ -18,7 +17,7 @@ async fn main() {
     let data = module.output("data", Twist::encode);
     let _handle = module.spawn();
 
-    let mut ticker = interval(Duration::from_millis(200)); // 5 Hz
+    let mut ticker = interval(Duration::from_millis(200));
     let mut seq = 0u64;
 
     loop {
@@ -32,7 +31,7 @@ async fn main() {
                 seq += 1;
             }
             Some(echo) = confirm.recv() => {
-                eprintln!("ping: echo received (seq={}, test_config={})", echo.linear.x as u64, echo.angular.z as i64);
+                eprintln!("ping: echo received (seq={}, sample_config={})", echo.linear.x as u64, echo.angular.z as i64);
             }
         }
     }

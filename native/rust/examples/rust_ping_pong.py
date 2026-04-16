@@ -1,8 +1,8 @@
-"""Two Rust NativeModules wired together: ping sends Twist messages, pong echoes them back.
+"""Two Rust NativeModules for a simple ping-pong example.
 
 PingModule and PongModule both declare a `data` port (Twist) and a `confirm` port (Twist).
-Matching port names cause the coordinator to assign them to the same LCM channel automatically —
-no manual transport configuration needed.
+Ping publishes to data (received by pong), and Pong published to confirm (received by ping).
+Topics and module configs are sent through stdin to modules.
 
 Run with:
     python dimos/native/rust/examples/native_ping_pong.py
@@ -32,7 +32,7 @@ class PongConfig(NativeModuleConfig):
     executable: str = str(_EXAMPLES / "native_pong")
     build_command: str = "cargo build --examples --release"
     cwd: str = str(_RUST_DIR)
-    test_config: int = 42
+    sample_config: int = 42
 
 
 class PingModule(NativeModule):
