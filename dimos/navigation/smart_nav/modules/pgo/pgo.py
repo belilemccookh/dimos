@@ -26,7 +26,7 @@ import threading
 import time
 from typing import Any
 
-import gtsam
+import gtsam  # type: ignore[import-untyped]
 import numpy as np
 from scipy.spatial import KDTree
 
@@ -94,8 +94,9 @@ def _icp(
 
     for _ in range(max_iter):
         dists, idxs = tree.query(src)
-        mask = dists < max_dist
-        if mask.sum() < 10:
+        mask = np.asarray(dists < max_dist)
+        idxs = np.asarray(idxs)
+        if int(mask.sum()) < 10:
             return T, float("inf")
 
         p = src[mask]
@@ -123,8 +124,11 @@ def _icp(
 
     # Fitness: mean squared distance of inliers
     dists_final, _ = tree.query(src)
-    mask = dists_final < max_dist
-    fitness = float(np.mean(dists_final[mask] ** 2)) if mask.sum() > 0 else float("inf")
+    mask_final = np.asarray(dists_final < max_dist)
+    dists_final = np.asarray(dists_final)
+    fitness = (
+        float(np.mean(dists_final[mask_final] ** 2)) if int(mask_final.sum()) > 0 else float("inf")
+    )
     return T, fitness
 
 
@@ -144,7 +148,7 @@ class _SimplePGO:
         self._cfg = config
         self._key_poses: list[_KeyPose] = []
         self._history_pairs: list[tuple[int, int]] = []
-        self._cache_pairs: list[dict] = []
+        self._cache_pairs: list[dict[str, Any]] = []
         self._r_offset = np.eye(3)
         self._t_offset = np.zeros(3)
 
@@ -167,7 +171,7 @@ class _SimplePGO:
         q_last = Rotation.from_matrix(last.r_local).as_quat()
         dot = abs(np.dot(q_cur, q_last))
         delta_deg = np.degrees(2.0 * np.arccos(min(dot, 1.0)))
-        return (
+        return bool(
             delta_trans > self._cfg.key_pose_delta_trans or delta_deg > self._cfg.key_pose_delta_deg
         )
 
@@ -378,7 +382,7 @@ class PGO(Module):
         self._last_global_map_time = 0.0
 
     def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
+        state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         for k in ("_lock", "_thread", "_pgo"):
             state.pop(k, None)
         return state

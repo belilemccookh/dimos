@@ -52,7 +52,6 @@ class TestAllNativeModulePaths:
 
     def test_cwd_exists(self, native_module):
         m = native_module()
-        m._resolve_paths()
         try:
             assert Path(m.config.cwd).exists()
         finally:
@@ -60,7 +59,6 @@ class TestAllNativeModulePaths:
 
     def test_executable_exists(self, native_module):
         m = native_module()
-        m._resolve_paths()
         try:
             exe = Path(m.config.executable)
             if not exe.exists():

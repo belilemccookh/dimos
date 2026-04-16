@@ -73,9 +73,7 @@ class TestPathResolution:
     """Verify native module paths resolve to real filesystem locations."""
 
     def _make(self):
-        m = TerrainAnalysis()
-        m._resolve_paths()
-        return m
+        return TerrainAnalysis()
 
     def test_cwd_resolves_to_existing_directory(self):
         m = self._make()

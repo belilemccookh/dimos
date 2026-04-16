@@ -72,7 +72,7 @@ class AriseSimAdapter(Module):
         self._latest_odom: Odometry | None = None
 
     def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
+        state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         state.pop("_lock", None)
         state.pop("_thread", None)
         return state

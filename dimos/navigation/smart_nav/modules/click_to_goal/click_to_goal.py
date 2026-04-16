@@ -59,7 +59,7 @@ class ClickToGoal(Module):
         self._robot_z = 0.0
 
     def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
+        state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         state.pop("_lock", None)
         return state
 

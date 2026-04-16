@@ -34,6 +34,8 @@ import logging
 from typing import Any
 
 from dimos.core.coordination.blueprints import Blueprint, autoconnect
+from dimos.core.module import ModuleBase
+from dimos.spec.utils import Spec
 
 logger = logging.getLogger(__name__)
 from dimos.navigation.cmd_vel_mux import CmdVelMux
@@ -226,7 +228,7 @@ def smart_nav(
     if use_global_map_updater:
         modules.append(GlobalMapUpdater.blueprint(**(global_map_updater or {})))
 
-    remappings = [
+    remappings: list[tuple[type[ModuleBase], str, str | type[ModuleBase] | type[Spec]]] = [
         # PathFollower cmd_vel → CmdVelMux nav input (avoid collision with mux output)
         (PathFollower, "cmd_vel", "nav_cmd_vel"),
         # Global-scale planners use PGO-corrected odometry (per CMU ICRA 2022):

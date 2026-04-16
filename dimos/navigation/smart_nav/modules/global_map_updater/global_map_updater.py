@@ -86,7 +86,7 @@ class GlobalMapUpdater(Module):
         self._robot_z = 0.0
 
     def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
+        state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         for k in ("_lock", "_thread", "_voxels"):
             state.pop(k, None)
         return state

@@ -77,12 +77,12 @@ class TerrainMapExt(Module):
         self._robot_y = 0.0
 
     def __getstate__(self) -> dict[str, Any]:
-        s = super().__getstate__()
+        s: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         for k in ("_lock", "_thread", "_voxels", "_column_index"):
             s.pop(k, None)
         return s
 
-    def __setstate__(self, s: dict) -> None:
+    def __setstate__(self, s: dict[str, Any]) -> None:
         super().__setstate__(s)
         self._lock = threading.Lock()
         self._thread = None

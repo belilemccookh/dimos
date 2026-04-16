@@ -327,7 +327,7 @@ class SimplePlanner(Module):
         self._last_costmap_pub = 0.0
 
     def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
+        state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
         for k in ("_lock", "_thread", "_costmap"):
             state.pop(k, None)
         return state
