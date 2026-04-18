@@ -66,25 +66,9 @@ unitree_g1_nav_onboard = (
         smart_nav(
             use_simple_planner=True,
             vehicle_height=G1.height_clearance,
-            # path_follower={"omni_dir_goal_threshold": 0.0},
             terrain_analysis={
                 "obstacle_height_threshold": 0.01,
                 "ground_height_threshold": 0.01,
-            },
-            local_planner={
-                # "max_speed": 2.0,
-                # "autonomy_speed": 2.0,
-                # "obstacle_height_threshold": 0.05,
-                # "freeze_ang": 180.0,
-                # "two_way_drive": False,
-            },
-            path_follower={
-                # "max_speed": 1.6,
-                # "autonomy_speed": 1.6,
-                # "max_acceleration": 3.5,
-                # "slow_down_distance_threshold": 0.5,
-                # "omni_dir_goal_threshold": 0.5,
-                "two_way_drive": False,
             },
             simple_planner={
                 "cell_size": 0.3,
@@ -101,16 +85,16 @@ unitree_g1_nav_onboard = (
             },
         ),
         G1HighLevelDdsSdk.blueprint(),
-        RerunBridgeModule.blueprint(
-            **smart_nav_rerun_config(
+        vis_module(
+            viewer_backend=global_config.viewer,
+            rerun_config=smart_nav_rerun_config(
                 {
                     "visual_override": {"world/odometry": g1_odometry_tf_override},
                     "static": {"world/tf/robot": g1_static_robot},
                     "memory_limit": "1GB",
                 }
-            )
+            ),
         ),
-        RerunWebSocketServer.blueprint(),
     )
     .remappings(
         [
