@@ -823,9 +823,13 @@ class UnitreeGo2TwistAdapter:
     def _call_sport_api(self, api_id: int, payload: dict | None = None) -> bool:
         """Generic escape hatch for undocumented mcf sport API IDs.
 
-        Issues SportClient._Call(api_id, json.dumps(payload or {})) under
-        session.lock. Returns True on RPC code 0. On failure, logs the
-        code and any response data for debugging.
+        SportClient's internal dispatcher rejects unregistered api_ids
+        with code 3103 (RPC_ERR_CLIENT_API_NOT_REG) before any message
+        leaves the process — the public SDK only registers its named
+        methods in __init__. We call _RegistApi() first (idempotent dict
+        set) so undocumented IDs like RAGEMODE reach the robot.
+
+        Returns True on RPC code 0. On failure, logs code + response.
         """
         import json
 
@@ -833,6 +837,7 @@ class UnitreeGo2TwistAdapter:
         body = json.dumps(payload or {})
         try:
             with session.lock:
+                session.client._RegistApi(api_id, 0)
                 code, data = session.client._Call(api_id, body)
         except Exception as e:
             logger.error(f"[Go2] _Call({api_id}, {body}) raised: {e}")
