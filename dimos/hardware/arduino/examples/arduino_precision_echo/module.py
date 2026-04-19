@@ -12,41 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Multi-type echo ArduinoModule for hardware round-trip testing.
+"""Precision echo ArduinoModule for hardware round-trip testing.
 
-Echoes Bool, Int32, Vector3, and Quaternion messages to validate
-serialization correctness and float64→float32 precision on AVR.
+Echoes Bool and Vector3 messages to validate serialization correctness
+and float64->float32 precision on AVR.  Kept to 2 message types so the
+sketch fits within Arduino Uno's 2KB SRAM.
 """
 
 from __future__ import annotations
 
 from dimos.core.arduino_module import ArduinoModule, ArduinoModuleConfig
 from dimos.core.stream import In, Out
-from dimos.msgs.geometry_msgs.Quaternion import Quaternion
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.std_msgs.Bool import Bool
-from dimos.msgs.std_msgs.Int32 import Int32
 
 
-class MultiEchoConfig(ArduinoModuleConfig):
+class PrecisionEchoConfig(ArduinoModuleConfig):
     sketch_path: str = "sketch/sketch.ino"
     board_fqbn: str = "arduino:avr:uno"
     baudrate: int = 115200
 
 
-class MultiEcho(ArduinoModule):
-    """Arduino that echoes multiple message types back."""
+class PrecisionEcho(ArduinoModule):
+    """Arduino that echoes Bool and Vector3 messages back."""
 
-    config: MultiEchoConfig
+    config: PrecisionEchoConfig
 
     bool_in: In[Bool]
     bool_out: Out[Bool]
 
-    int32_in: In[Int32]
-    int32_out: Out[Int32]
-
     vec3_in: In[Vector3]
     vec3_out: Out[Vector3]
-
-    quat_in: In[Quaternion]
-    quat_out: Out[Quaternion]

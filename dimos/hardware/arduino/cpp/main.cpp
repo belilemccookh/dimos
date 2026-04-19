@@ -158,7 +158,12 @@ static void parse_args(Bridge &b, int argc, char **argv)
             b.reconnect_interval = std::atof(argv[++i]);
         } else if ((arg == "--topic_out" || arg == "--topic_in") && i + 2 < argc) {
             auto tm = std::make_unique<TopicMapping>();
-            tm->topic_id = (uint16_t)std::atoi(argv[++i]);
+            int raw_id = std::atoi(argv[++i]);
+            if (raw_id <= 0 || raw_id > 65534) {
+                fprintf(stderr, "[bridge] Invalid topic_id %d (must be 1..65534)\n", raw_id);
+                exit(1);
+            }
+            tm->topic_id = (uint16_t)raw_id;
             tm->lcm_channel = argv[++i];
             tm->is_output = (arg == "--topic_out");
             b.topics.push_back(std::move(tm));

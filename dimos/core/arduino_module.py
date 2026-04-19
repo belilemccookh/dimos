@@ -604,10 +604,32 @@ class ArduinoModule(NativeModule):
                 f"`_validate_inbound_payload_sizes`."
             )
 
+    def _warn_avr_sram_pressure(self, stream_types: dict[str, type]) -> None:
+        """Log a warning if the number of streams is likely to overflow AVR SRAM.
+
+        Each stream adds a subscription entry (~9 bytes), a topic mapping
+        entry, and the type's encode/decode code.  The LCM pubsub engine
+        itself uses ~256 bytes (decode buffer + outbox) on AVR.  With
+        Arduino Uno's 2KB total SRAM, more than ~4 streams is risky.
+        """
+        if not self.config.board_fqbn.startswith(_AVR_FQBN_PREFIXES):
+            return
+        n = len(stream_types)
+        if n > 4:
+            logger.warning(
+                "AVR SRAM pressure: %d streams declared on a board with "
+                "~2KB SRAM. Each stream adds subscriptions, type descriptors, "
+                "and encode/decode buffers. Compilation may fail with 'data "
+                "section exceeds available space'. Consider reducing streams "
+                "or using a board with more SRAM.",
+                n,
+            )
+
     def _build_topic_enum(self) -> dict[str, int]:
         """Assign topic IDs to streams. Topic 0 is reserved for debug."""
         stream_types = self._get_stream_types()
-        # Topic IDs are uint16_t (2 bytes) with 0 reserved for debug.
+        # Topic IDs are uint16_t (1..65534); 0 is reserved for debug,
+        # 65535 (0xFFFF) is reserved as a sentinel.
         max_topics = 65534
         if len(stream_types) > max_topics:
             raise ValueError(
@@ -682,6 +704,7 @@ class ArduinoModule(NativeModule):
         stream_types = self._get_stream_types()
         topic_enum = self._build_topic_enum()
         self._validate_inbound_payload_sizes(stream_types)
+        self._warn_avr_sram_pressure(stream_types)
 
         sections: list[str] = []
 
@@ -985,9 +1008,21 @@ class ArduinoModule(NativeModule):
             timeout=120,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Arduino sketch compilation failed:\n{result.stderr}\n{result.stdout}"
-            )
+            combined = f"{result.stderr}\n{result.stdout}"
+            hint = ""
+            if "data section exceeds available space" in combined:
+                n_streams = len(self._get_stream_types())
+                hint = (
+                    f"\n\nHint: your sketch exceeded the board's SRAM. "
+                    f"This module has {n_streams} streams — each stream "
+                    f"adds subscriptions, type descriptors, and encode/"
+                    f"decode buffers to SRAM. Arduino Uno only has 2KB. "
+                    f"Try: (a) reduce the number of In/Out streams, "
+                    f"(b) use a board with more SRAM (e.g. Mega 2560), "
+                    f"or (c) reduce buffer sizes via "
+                    f"-DDIMOS_LCM_MAX_MSG_SIZE=<smaller>."
+                )
+            raise RuntimeError(f"Arduino sketch compilation failed:\n{combined}{hint}")
         logger.info("Arduino sketch compiled successfully", build_dir=str(build_dir))
 
     def _start_qemu(self) -> str:
