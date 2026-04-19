@@ -81,4 +81,5 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--cov=dimos --cov-report=term-missing"
+# removed --cov flags so a quick `pytest` run doesn't require pytest-cov installed locally
+addopts = "-v"
